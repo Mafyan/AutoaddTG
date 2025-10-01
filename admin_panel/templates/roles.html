@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block title %}Роли{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="brand">
+        <i class="bi bi-robot"></i> User Control
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="/dashboard">
+            <i class="bi bi-speedometer2"></i> Панель управления
+        </a>
+        <a class="nav-link" href="/requests">
+            <i class="bi bi-person-check"></i> Заявки
+        </a>
+        <a class="nav-link" href="/users">
+            <i class="bi bi-people"></i> Пользователи
+        </a>
+        <a class="nav-link active" href="/roles">
+            <i class="bi bi-person-badge"></i> Роли
+        </a>
+        <a class="nav-link" href="/chats">
+            <i class="bi bi-chat-dots"></i> Чаты
+        </a>
+        <hr style="border-color: rgba(255,255,255,0.2);">
+        <a class="nav-link" href="#" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Выход
+        </a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 fw-bold">Роли</h1>
+        <div>
+            <button class="btn btn-primary" onclick="openCreateModal()">
+                <i class="bi bi-plus-lg"></i> Создать роль
+            </button>
+            <button class="btn btn-outline-secondary" onclick="loadRoles()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить
+            </button>
+        </div>
+    </div>
+    
+    <div class="row g-4" id="rolesContainer">
+        <div class="col-12 text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Role Modal -->
+<div class="modal fade" id="roleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="roleModalTitle">Создать роль</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="roleForm">
+                    <input type="hidden" id="roleId">
+                    <div class="mb-3">
+                        <label class="form-label">Название роли</label>
+                        <input type="text" class="form-control" id="roleName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" id="roleDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Привязанные чаты</label>
+                        <div id="chatsCheckboxes" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                            <div class="text-center py-3">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveRole()">
+                    <i class="bi bi-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let roleModal;
+    let allChats = [];
+    
+    async function loadChats() {
+        try {
+            const response = await apiRequest('/api/chats');
+            allChats = await response.json();
+        } catch (error) {
+            console.error('Error loading chats:', error);
+        }
+    }
+    
+    async function loadRoles() {
+        try {
+            const response = await apiRequest('/api/roles');
+            const roles = await response.json();
+            
+            const container = document.getElementById('rolesContainer');
+            
+            if (roles.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12 text-center py-5">
+                        <i class="bi bi-person-badge" style="font-size: 4rem; color: #dee2e6;"></i>
+                        <p class="text-muted mt-3">Нет ролей</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = roles.map(role => `
+                <div class="col-md-6 col-lg-4">
+                    <div class="stat-card">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 class="fw-bold mb-1">${role.name}</h5>
+                                <p class="text-muted small mb-0">${role.description || 'Нет описания'}</p>
+                            </div>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots-vertical"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="openEditModal(${role.id})">
+                                        <i class="bi bi-pencil"></i> Редактировать
+                                    </a></li>
+                                    <li><a class="dropdown-item text-danger" href="#" onclick="deleteRole(${role.id})">
+                                        <i class="bi bi-trash"></i> Удалить
+                                    </a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <small class="text-muted">Пользователей: <strong>${role.user_count}</strong></small>
+                        </div>
+                        <div>
+                            <small class="text-muted d-block mb-2">Чаты (${role.chats.length}):</small>
+                            ${role.chats.length > 0 ? 
+                                role.chats.slice(0, 3).map(chat => 
+                                    `<span class="badge bg-secondary me-1 mb-1">${chat.name}</span>`
+                                ).join('') + (role.chats.length > 3 ? `<span class="badge bg-light text-dark">+${role.chats.length - 3}</span>` : '')
+                                : '<span class="text-muted">Нет привязанных чатов</span>'}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } catch (error) {
+            console.error('Error loading roles:', error);
+        }
+    }
+    
+    function openCreateModal() {
+        document.getElementById('roleModalTitle').textContent = 'Создать роль';
+        document.getElementById('roleId').value = '';
+        document.getElementById('roleName').value = '';
+        document.getElementById('roleDescription').value = '';
+        
+        renderChatCheckboxes([]);
+        roleModal.show();
+    }
+    
+    async function openEditModal(roleId) {
+        try {
+            const response = await apiRequest('/api/roles');
+            const roles = await response.json();
+            const role = roles.find(r => r.id === roleId);
+            
+            if (role) {
+                document.getElementById('roleModalTitle').textContent = 'Редактировать роль';
+                document.getElementById('roleId').value = role.id;
+                document.getElementById('roleName').value = role.name;
+                document.getElementById('roleDescription').value = role.description || '';
+                
+                const chatIds = role.chats.map(c => c.id);
+                renderChatCheckboxes(chatIds);
+                roleModal.show();
+            }
+        } catch (error) {
+            console.error('Error loading role:', error);
+        }
+    }
+    
+    function renderChatCheckboxes(selectedChatIds) {
+        const container = document.getElementById('chatsCheckboxes');
+        
+        if (allChats.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center mb-0">Нет доступных чатов</p>';
+            return;
+        }
+        
+        container.innerHTML = allChats.map(chat => `
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" value="${chat.id}" id="chat_${chat.id}"
+                    ${selectedChatIds.includes(chat.id) ? 'checked' : ''}>
+                <label class="form-check-label" for="chat_${chat.id}">
+                    ${chat.chat_name}
+                    ${chat.description ? `<small class="text-muted d-block">${chat.description}</small>` : ''}
+                </label>
+            </div>
+        `).join('');
+    }
+    
+    async function saveRole() {
+        const roleId = document.getElementById('roleId').value;
+        const name = document.getElementById('roleName').value.trim();
+        const description = document.getElementById('roleDescription').value.trim();
+        
+        if (!name) {
+            alert('Пожалуйста, введите название роли');
+            return;
+        }
+        
+        const selectedChats = Array.from(document.querySelectorAll('#chatsCheckboxes input:checked'))
+            .map(cb => parseInt(cb.value));
+        
+        try {
+            const data = {
+                name: name,
+                description: description || null,
+                chat_ids: selectedChats
+            };
+            
+            let response;
+            if (roleId) {
+                // Update existing role
+                response = await apiRequest(`/api/roles/${roleId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                });
+            } else {
+                // Create new role
+                const createResponse = await apiRequest('/api/roles', {
+                    method: 'POST',
+                    body: JSON.stringify({name: data.name, description: data.description})
+                });
+                
+                const result = await createResponse.json();
+                
+                // Assign chats to new role
+                if (selectedChats.length > 0) {
+                    await apiRequest(`/api/roles/${result.role_id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({chat_ids: selectedChats})
+                    });
+                }
+                
+                response = createResponse;
+            }
+            
+            if (response.ok) {
+                roleModal.hide();
+                loadRoles();
+                alert(roleId ? 'Роль обновлена!' : 'Роль создана!');
+            }
+        } catch (error) {
+            console.error('Error saving role:', error);
+            alert('Ошибка при сохранении роли');
+        }
+    }
+    
+    async function deleteRole(roleId) {
+        if (!confirm('Вы уверены, что хотите удалить эту роль?')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/roles/${roleId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                loadRoles();
+                alert('Роль удалена');
+            }
+        } catch (error) {
+            console.error('Error deleting role:', error);
+            alert('Ошибка при удалении роли');
+        }
+    }
+    
+    // Check authentication and initialize
+    if (!getToken()) {
+        window.location.href = '/';
+    } else {
+        roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
+        loadChats().then(() => loadRoles());
+    }
+</script>
+{% endblock %}
+

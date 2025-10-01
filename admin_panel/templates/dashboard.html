@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Панель управления{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="brand">
+        <i class="bi bi-robot"></i> User Control
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link active" href="/dashboard">
+            <i class="bi bi-speedometer2"></i> Панель управления
+        </a>
+        <a class="nav-link" href="/requests">
+            <i class="bi bi-person-check"></i> Заявки
+        </a>
+        <a class="nav-link" href="/users">
+            <i class="bi bi-people"></i> Пользователи
+        </a>
+        <a class="nav-link" href="/roles">
+            <i class="bi bi-person-badge"></i> Роли
+        </a>
+        <a class="nav-link" href="/chats">
+            <i class="bi bi-chat-dots"></i> Чаты
+        </a>
+        <hr style="border-color: rgba(255,255,255,0.2);">
+        <a class="nav-link" href="#" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Выход
+        </a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 fw-bold">Панель управления</h1>
+        <button class="btn btn-outline-secondary" onclick="loadStats()">
+            <i class="bi bi-arrow-clockwise"></i> Обновить
+        </button>
+    </div>
+    
+    <div class="row g-4" id="statsContainer">
+        <!-- Stats will be loaded here -->
+    </div>
+    
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="table-container">
+                <h4 class="mb-3">Последние заявки</h4>
+                <div id="recentRequests">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadStats() {
+        try {
+            const response = await apiRequest('/api/stats');
+            const data = await response.json();
+            
+            const statsContainer = document.getElementById('statsContainer');
+            statsContainer.innerHTML = `
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon" style="background: #e3f2fd; color: #1976d2;">
+                            <i class="bi bi-people"></i>
+                        </div>
+                        <h3>${data.total_users}</h3>
+                        <p>Всего пользователей</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon" style="background: #fff3e0; color: #f57c00;">
+                            <i class="bi bi-hourglass-split"></i>
+                        </div>
+                        <h3>${data.pending_requests}</h3>
+                        <p>Ожидают одобрения</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon" style="background: #e8f5e9; color: #388e3c;">
+                            <i class="bi bi-check-circle"></i>
+                        </div>
+                        <h3>${data.approved_users}</h3>
+                        <p>Одобрено</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon" style="background: #fce4ec; color: #c2185b;">
+                            <i class="bi bi-x-circle"></i>
+                        </div>
+                        <h3>${data.rejected_users}</h3>
+                        <p>Отклонено</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card">
+                        <div class="icon" style="background: #f3e5f5; color: #7b1fa2;">
+                            <i class="bi bi-person-badge"></i>
+                        </div>
+                        <h3>${data.total_roles}</h3>
+                        <p>Ролей</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card">
+                        <div class="icon" style="background: #e0f2f1; color: #00796b;">
+                            <i class="bi bi-chat-dots"></i>
+                        </div>
+                        <h3>${data.total_chats}</h3>
+                        <p>Чатов</p>
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+    
+    async function loadRecentRequests() {
+        try {
+            const response = await apiRequest('/api/users?status=pending');
+            const users = await response.json();
+            
+            const container = document.getElementById('recentRequests');
+            
+            if (users.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center py-4">Нет новых заявок</p>';
+                return;
+            }
+            
+            const tableHtml = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Имя</th>
+                                <th>Телефон</th>
+                                <th>Username</th>
+                                <th>Дата</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.slice(0, 5).map(user => `
+                                <tr>
+                                    <td>${user.first_name || ''} ${user.last_name || ''}</td>
+                                    <td>${user.phone_number}</td>
+                                    <td>${user.username ? '@' + user.username : '-'}</td>
+                                    <td>${new Date(user.created_at).toLocaleString('ru-RU')}</td>
+                                    <td>
+                                        <a href="/requests" class="btn btn-sm btn-primary">
+                                            Обработать
+                                        </a>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHtml;
+        } catch (error) {
+            console.error('Error loading recent requests:', error);
+        }
+    }
+    
+    // Check authentication
+    if (!getToken()) {
+        window.location.href = '/';
+    } else {
+        loadStats();
+        loadRecentRequests();
+    }
+</script>
+{% endblock %}
+

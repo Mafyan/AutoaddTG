@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Заявки{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="brand">
+        <i class="bi bi-robot"></i> User Control
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="/dashboard">
+            <i class="bi bi-speedometer2"></i> Панель управления
+        </a>
+        <a class="nav-link active" href="/requests">
+            <i class="bi bi-person-check"></i> Заявки
+        </a>
+        <a class="nav-link" href="/users">
+            <i class="bi bi-people"></i> Пользователи
+        </a>
+        <a class="nav-link" href="/roles">
+            <i class="bi bi-person-badge"></i> Роли
+        </a>
+        <a class="nav-link" href="/chats">
+            <i class="bi bi-chat-dots"></i> Чаты
+        </a>
+        <hr style="border-color: rgba(255,255,255,0.2);">
+        <a class="nav-link" href="#" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Выход
+        </a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 fw-bold">Заявки на регистрацию</h1>
+        <button class="btn btn-outline-secondary" onclick="loadRequests()">
+            <i class="bi bi-arrow-clockwise"></i> Обновить
+        </button>
+    </div>
+    
+    <div class="table-container">
+        <div id="requestsTable">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Approve Modal -->
+<div class="modal fade" id="approveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Одобрить заявку</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="approveForm">
+                    <input type="hidden" id="approveUserId">
+                    <div class="mb-3">
+                        <label class="form-label">Выберите роль</label>
+                        <select class="form-select" id="roleSelect" required>
+                            <option value="">Выберите роль...</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" onclick="approveUser()">
+                    <i class="bi bi-check-lg"></i> Одобрить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let approveModal;
+    let roles = [];
+    
+    async function loadRoles() {
+        try {
+            const response = await apiRequest('/api/roles');
+            roles = await response.json();
+            
+            const roleSelect = document.getElementById('roleSelect');
+            roleSelect.innerHTML = '<option value="">Выберите роль...</option>' +
+                roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('');
+        } catch (error) {
+            console.error('Error loading roles:', error);
+        }
+    }
+    
+    async function loadRequests() {
+        try {
+            const response = await apiRequest('/api/users?status=pending');
+            const users = await response.json();
+            
+            const container = document.getElementById('requestsTable');
+            
+            if (users.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox" style="font-size: 4rem; color: #dee2e6;"></i>
+                        <p class="text-muted mt-3">Нет новых заявок</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHtml = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Имя</th>
+                                <th>Телефон</th>
+                                <th>Username</th>
+                                <th>Дата подачи</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(user => `
+                                <tr>
+                                    <td>${user.id}</td>
+                                    <td>${user.first_name || ''} ${user.last_name || ''}</td>
+                                    <td>${user.phone_number}</td>
+                                    <td>${user.username ? '@' + user.username : '-'}</td>
+                                    <td>${new Date(user.created_at).toLocaleString('ru-RU')}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-success me-2" onclick="openApproveModal(${user.id})">
+                                            <i class="bi bi-check-lg"></i> Одобрить
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="rejectUser(${user.id})">
+                                            <i class="bi bi-x-lg"></i> Отклонить
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHtml;
+        } catch (error) {
+            console.error('Error loading requests:', error);
+        }
+    }
+    
+    function openApproveModal(userId) {
+        document.getElementById('approveUserId').value = userId;
+        approveModal.show();
+    }
+    
+    async function approveUser() {
+        const userId = document.getElementById('approveUserId').value;
+        const roleId = document.getElementById('roleSelect').value;
+        
+        if (!roleId) {
+            alert('Пожалуйста, выберите роль');
+            return;
+        }
+        
+        try {
+            const formData = new FormData();
+            formData.append('role_id', roleId);
+            
+            const response = await apiRequest(`/api/requests/${userId}/approve`, {
+                method: 'POST',
+                headers: {},
+                body: formData
+            });
+            
+            if (response.ok) {
+                approveModal.hide();
+                loadRequests();
+                alert('Заявка одобрена!');
+            }
+        } catch (error) {
+            console.error('Error approving user:', error);
+            alert('Ошибка при одобрении заявки');
+        }
+    }
+    
+    async function rejectUser(userId) {
+        if (!confirm('Вы уверены, что хотите отклонить эту заявку?')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/requests/${userId}/reject`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                loadRequests();
+                alert('Заявка отклонена');
+            }
+        } catch (error) {
+            console.error('Error rejecting user:', error);
+            alert('Ошибка при отклонении заявки');
+        }
+    }
+    
+    // Check authentication and initialize
+    if (!getToken()) {
+        window.location.href = '/';
+    } else {
+        approveModal = new bootstrap.Modal(document.getElementById('approveModal'));
+        loadRoles();
+        loadRequests();
+    }
+</script>
+{% endblock %}
+

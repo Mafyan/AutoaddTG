@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Чаты{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="brand">
+        <i class="bi bi-robot"></i> User Control
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="/dashboard">
+            <i class="bi bi-speedometer2"></i> Панель управления
+        </a>
+        <a class="nav-link" href="/requests">
+            <i class="bi bi-person-check"></i> Заявки
+        </a>
+        <a class="nav-link" href="/users">
+            <i class="bi bi-people"></i> Пользователи
+        </a>
+        <a class="nav-link" href="/roles">
+            <i class="bi bi-person-badge"></i> Роли
+        </a>
+        <a class="nav-link active" href="/chats">
+            <i class="bi bi-chat-dots"></i> Чаты
+        </a>
+        <hr style="border-color: rgba(255,255,255,0.2);">
+        <a class="nav-link" href="#" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Выход
+        </a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 fw-bold">Чаты</h1>
+        <div>
+            <button class="btn btn-primary" onclick="openCreateModal()">
+                <i class="bi bi-plus-lg"></i> Добавить чат
+            </button>
+            <button class="btn btn-outline-secondary" onclick="loadChats()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить
+            </button>
+        </div>
+    </div>
+    
+    <div class="table-container">
+        <div id="chatsTable">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Chat Modal -->
+<div class="modal fade" id="chatModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chatModalTitle">Добавить чат</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="chatForm">
+                    <input type="hidden" id="chatId">
+                    <div class="mb-3">
+                        <label class="form-label">Название чата</label>
+                        <input type="text" class="form-control" id="chatName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ссылка на чат</label>
+                        <input type="text" class="form-control" id="chatLink" placeholder="https://t.me/...">
+                        <small class="text-muted">Инвайт-ссылка на Telegram чат</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Chat ID (необязательно)</label>
+                        <input type="number" class="form-control" id="chatTgId" placeholder="-100...">
+                        <small class="text-muted">Telegram Chat ID (если известен)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" id="chatDescription" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveChat()">
+                    <i class="bi bi-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let chatModal;
+    
+    async function loadChats() {
+        try {
+            const response = await apiRequest('/api/chats');
+            const chats = await response.json();
+            
+            const container = document.getElementById('chatsTable');
+            
+            if (chats.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-chat-dots" style="font-size: 4rem; color: #dee2e6;"></i>
+                        <p class="text-muted mt-3">Нет чатов</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHtml = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Ссылка</th>
+                                <th>Chat ID</th>
+                                <th>Описание</th>
+                                <th>Привязанные роли</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${chats.map(chat => `
+                                <tr>
+                                    <td>${chat.id}</td>
+                                    <td>${chat.chat_name}</td>
+                                    <td>
+                                        ${chat.chat_link ? 
+                                            `<a href="${chat.chat_link}" target="_blank" class="text-decoration-none">
+                                                <i class="bi bi-link-45deg"></i> Ссылка
+                                            </a>` : 
+                                            '-'}
+                                    </td>
+                                    <td><code>${chat.chat_id || '-'}</code></td>
+                                    <td>${chat.description || '-'}</td>
+                                    <td>
+                                        ${chat.roles.length > 0 ? 
+                                            chat.roles.map(role => 
+                                                `<span class="badge bg-secondary me-1">${role.name}</span>`
+                                            ).join('') : 
+                                            '<span class="text-muted">-</span>'}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal(${JSON.stringify(chat).replace(/'/g, "&apos;")})'>
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteChat(${chat.id})">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHtml;
+        } catch (error) {
+            console.error('Error loading chats:', error);
+        }
+    }
+    
+    function openCreateModal() {
+        document.getElementById('chatModalTitle').textContent = 'Добавить чат';
+        document.getElementById('chatId').value = '';
+        document.getElementById('chatName').value = '';
+        document.getElementById('chatLink').value = '';
+        document.getElementById('chatTgId').value = '';
+        document.getElementById('chatDescription').value = '';
+        chatModal.show();
+    }
+    
+    function openEditModal(chat) {
+        document.getElementById('chatModalTitle').textContent = 'Редактировать чат';
+        document.getElementById('chatId').value = chat.id;
+        document.getElementById('chatName').value = chat.chat_name;
+        document.getElementById('chatLink').value = chat.chat_link || '';
+        document.getElementById('chatTgId').value = chat.chat_id || '';
+        document.getElementById('chatDescription').value = chat.description || '';
+        chatModal.show();
+    }
+    
+    async function saveChat() {
+        const chatId = document.getElementById('chatId').value;
+        const name = document.getElementById('chatName').value.trim();
+        const link = document.getElementById('chatLink').value.trim();
+        const tgId = document.getElementById('chatTgId').value.trim();
+        const description = document.getElementById('chatDescription').value.trim();
+        
+        if (!name) {
+            alert('Пожалуйста, введите название чата');
+            return;
+        }
+        
+        try {
+            const data = {
+                chat_name: name,
+                chat_link: link || null,
+                chat_id: tgId ? parseInt(tgId) : null,
+                description: description || null
+            };
+            
+            let response;
+            if (chatId) {
+                // Update existing chat
+                response = await apiRequest(`/api/chats/${chatId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                });
+            } else {
+                // Create new chat
+                response = await apiRequest('/api/chats', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+            }
+            
+            if (response.ok) {
+                chatModal.hide();
+                loadChats();
+                alert(chatId ? 'Чат обновлен!' : 'Чат добавлен!');
+            }
+        } catch (error) {
+            console.error('Error saving chat:', error);
+            alert('Ошибка при сохранении чата');
+        }
+    }
+    
+    async function deleteChat(chatId) {
+        if (!confirm('Вы уверены, что хотите удалить этот чат?')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/chats/${chatId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                loadChats();
+                alert('Чат удален');
+            }
+        } catch (error) {
+            console.error('Error deleting chat:', error);
+            alert('Ошибка при удалении чата');
+        }
+    }
+    
+    // Check authentication and initialize
+    if (!getToken()) {
+        window.location.href = '/';
+    } else {
+        chatModal = new bootstrap.Modal(document.getElementById('chatModal'));
+        loadChats();
+    }
+</script>
+{% endblock %}
+

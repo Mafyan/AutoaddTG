@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Пользователи{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="brand">
+        <i class="bi bi-robot"></i> User Control
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="/dashboard">
+            <i class="bi bi-speedometer2"></i> Панель управления
+        </a>
+        <a class="nav-link" href="/requests">
+            <i class="bi bi-person-check"></i> Заявки
+        </a>
+        <a class="nav-link active" href="/users">
+            <i class="bi bi-people"></i> Пользователи
+        </a>
+        <a class="nav-link" href="/roles">
+            <i class="bi bi-person-badge"></i> Роли
+        </a>
+        <a class="nav-link" href="/chats">
+            <i class="bi bi-chat-dots"></i> Чаты
+        </a>
+        <hr style="border-color: rgba(255,255,255,0.2);">
+        <a class="nav-link" href="#" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Выход
+        </a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 fw-bold">Пользователи</h1>
+        <div>
+            <select class="form-select d-inline-block w-auto me-2" id="statusFilter" onchange="loadUsers()">
+                <option value="">Все статусы</option>
+                <option value="pending">Ожидают</option>
+                <option value="approved">Одобрено</option>
+                <option value="rejected">Отклонено</option>
+            </select>
+            <button class="btn btn-outline-secondary" onclick="loadUsers()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить
+            </button>
+        </div>
+    </div>
+    
+    <div class="table-container">
+        <div id="usersTable">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редактировать пользователя</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="mb-3">
+                        <label class="form-label">Роль</label>
+                        <select class="form-select" id="editRoleSelect">
+                            <option value="">Без роли</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Статус</label>
+                        <select class="form-select" id="editStatusSelect">
+                            <option value="pending">Ожидает</option>
+                            <option value="approved">Одобрено</option>
+                            <option value="rejected">Отклонено</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveUser()">
+                    <i class="bi bi-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let editModal;
+    let roles = [];
+    
+    async function loadRoles() {
+        try {
+            const response = await apiRequest('/api/roles');
+            roles = await response.json();
+            
+            const roleSelect = document.getElementById('editRoleSelect');
+            roleSelect.innerHTML = '<option value="">Без роли</option>' +
+                roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('');
+        } catch (error) {
+            console.error('Error loading roles:', error);
+        }
+    }
+    
+    async function loadUsers() {
+        try {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const url = statusFilter ? `/api/users?status=${statusFilter}` : '/api/users';
+            
+            const response = await apiRequest(url);
+            const users = await response.json();
+            
+            const container = document.getElementById('usersTable');
+            
+            if (users.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-people" style="font-size: 4rem; color: #dee2e6;"></i>
+                        <p class="text-muted mt-3">Нет пользователей</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const statusBadge = (status) => {
+                const badges = {
+                    'pending': '<span class="badge badge-pending">Ожидает</span>',
+                    'approved': '<span class="badge badge-approved">Одобрено</span>',
+                    'rejected': '<span class="badge badge-rejected">Отклонено</span>'
+                };
+                return badges[status] || status;
+            };
+            
+            const tableHtml = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Имя</th>
+                                <th>Телефон</th>
+                                <th>Username</th>
+                                <th>Роль</th>
+                                <th>Статус</th>
+                                <th>Дата регистрации</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(user => `
+                                <tr>
+                                    <td>${user.id}</td>
+                                    <td>${user.first_name || ''} ${user.last_name || ''}</td>
+                                    <td>${user.phone_number}</td>
+                                    <td>${user.username ? '@' + user.username : '-'}</td>
+                                    <td>${user.role ? user.role.name : '-'}</td>
+                                    <td>${statusBadge(user.status)}</td>
+                                    <td>${new Date(user.created_at).toLocaleString('ru-RU')}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary me-1" onclick="openEditModal(${user.id}, '${user.role?.id || ''}', '${user.status}')">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${user.id})">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHtml;
+        } catch (error) {
+            console.error('Error loading users:', error);
+        }
+    }
+    
+    function openEditModal(userId, roleId, status) {
+        document.getElementById('editUserId').value = userId;
+        document.getElementById('editRoleSelect').value = roleId;
+        document.getElementById('editStatusSelect').value = status;
+        editModal.show();
+    }
+    
+    async function saveUser() {
+        const userId = document.getElementById('editUserId').value;
+        const roleId = document.getElementById('editRoleSelect').value;
+        const status = document.getElementById('editStatusSelect').value;
+        
+        try {
+            const data = {
+                status: status
+            };
+            
+            if (roleId) {
+                data.role_id = parseInt(roleId);
+            }
+            
+            const response = await apiRequest(`/api/users/${userId}`, {
+                method: 'PUT',
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                editModal.hide();
+                loadUsers();
+                alert('Пользователь обновлен!');
+            }
+        } catch (error) {
+            console.error('Error updating user:', error);
+            alert('Ошибка при обновлении пользователя');
+        }
+    }
+    
+    async function deleteUser(userId) {
+        if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/users/${userId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                loadUsers();
+                alert('Пользователь удален');
+            }
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            alert('Ошибка при удалении пользователя');
+        }
+    }
+    
+    // Check authentication and initialize
+    if (!getToken()) {
+        window.location.href = '/';
+    } else {
+        editModal = new bootstrap.Modal(document.getElementById('editModal'));
+        loadRoles();
+        loadUsers();
+    }
+</script>
+{% endblock %}
+
