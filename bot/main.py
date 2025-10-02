@@ -16,7 +16,9 @@ from bot.handlers import (
     mychats_command,
     handle_contact,
     handle_text_phone,
-    error_handler
+    error_handler,
+    list_chats_command,
+    sync_chats_command
 )
 
 # Configure logging
@@ -41,6 +43,8 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("mychats", mychats_command))
+    application.add_handler(CommandHandler("listchats", list_chats_command))
+    application.add_handler(CommandHandler("syncchats", sync_chats_command))
     
     # Add message handlers
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))

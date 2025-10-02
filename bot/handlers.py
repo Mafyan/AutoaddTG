@@ -8,7 +8,8 @@ from database.crud import (
     get_user_by_phone,
     create_user,
     get_chats_by_role,
-    add_chat_member
+    add_chat_member,
+    get_admin_by_telegram_id
 )
 from bot.chat_manager import ChatManager
 from config import settings
@@ -301,4 +302,84 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Произошла ошибка при обработке вашего запроса.\n"
             "Пожалуйста, попробуйте позже или обратитесь к администратору."
         )
+
+async def list_chats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /listchats command for admins."""
+    user = update.effective_user
+    db = SessionLocal()
+    
+    try:
+        # Check if user is admin
+        admin = get_admin_by_telegram_id(db, user.id)
+        if not admin:
+            await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
+            return
+        
+        # Get all chats where bot is a member
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        chats = await chat_manager.get_bot_chats()
+        
+        if not chats:
+            await update.message.reply_text("🤖 Бот не найден ни в одном групповом чате.")
+            return
+        
+        # Format response
+        message = "📋 **Список чатов, где находится бот:**\n\n"
+        
+        for i, chat in enumerate(chats, 1):
+            message += f"{i}. **{chat['title']}**\n"
+            message += f"   ID: `{chat['id']}`\n"
+            message += f"   Тип: {chat['type']}\n"
+            if chat['username']:
+                message += f"   Username: @{chat['username']}\n"
+            if chat['invite_link']:
+                message += f"   [Ссылка]({chat['invite_link']})\n"
+            message += "\n"
+        
+        # Split message if too long
+        if len(message) > 4000:
+            chunks = [message[i:i+4000] for i in range(0, len(message), 4000)]
+            for chunk in chunks:
+                await update.message.reply_text(chunk, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(message, parse_mode='Markdown')
+            
+    except Exception as e:
+        logger.error(f"Error in list_chats_command: {e}")
+        await update.message.reply_text("❌ Ошибка при получении списка чатов.")
+    finally:
+        db.close()
+
+async def sync_chats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /syncchats command for admins."""
+    user = update.effective_user
+    db = SessionLocal()
+    
+    try:
+        # Check if user is admin
+        admin = get_admin_by_telegram_id(db, user.id)
+        if not admin:
+            await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
+            return
+        
+        await update.message.reply_text("🔄 Начинаю синхронизацию чатов...")
+        
+        # Sync chats to database
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        results = await chat_manager.sync_chats_to_database(db)
+        
+        message = f"✅ **Синхронизация завершена!**\n\n"
+        message += f"📊 **Результаты:**\n"
+        message += f"• Найдено чатов: {results['total_found']}\n"
+        message += f"• Создано: {results['created']}\n"
+        message += f"• Обновлено: {results['updated']}\n"
+        message += f"• Ошибок: {results['errors']}\n"
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+            
+    except Exception as e:
+        logger.error(f"Error in sync_chats_command: {e}")
+        await update.message.reply_text("❌ Ошибка при синхронизации чатов.")
+    finally:
+        db.close()
 
