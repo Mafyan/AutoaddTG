@@ -436,10 +436,38 @@ async def api_get_user_chats(
 ):
     """Get user's chat memberships."""
     try:
+        # Get user info
+        user = get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        print(f"DEBUG: Getting chats for user {user_id}")
+        print(f"DEBUG: User telegram_id: {user.telegram_id}")
+        print(f"DEBUG: User role_id: {user.role_id}")
+        print(f"DEBUG: User status: {user.status}")
+        
+        # Get user's chat memberships
         memberships = get_user_chat_memberships(db, user_id)
+        print(f"DEBUG: Found {len(memberships)} memberships")
+        
+        # If no memberships and user is approved, try to add them to role chats
+        if len(memberships) == 0 and user.status == 'approved' and user.role_id and user.telegram_id:
+            print(f"DEBUG: User has no memberships, trying to add to role chats")
+            success = add_user_to_role_chats(db, user_id)
+            print(f"DEBUG: Added to role chats: {success}")
+            
+            # Get memberships again
+            memberships = get_user_chat_memberships(db, user_id)
+            print(f"DEBUG: After adding to role chats: {len(memberships)} memberships")
+        
         return {
             "status": "success",
-            "memberships": memberships
+            "memberships": memberships,
+            "user_info": {
+                "telegram_id": user.telegram_id,
+                "role_id": user.role_id,
+                "status": user.status
+            }
         }
     except Exception as e:
         print(f"Error getting user chats: {e}")
@@ -485,6 +513,39 @@ async def api_remove_user_from_chat(
     except Exception as e:
         print(f"Error removing user from chat: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to remove user from chat: {str(e)}")
+
+@router.get("/api/debug/role-chat-connections")
+async def api_debug_role_chat_connections(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Debug role-chat connections."""
+    try:
+        # Get all roles
+        roles = get_roles(db)
+        role_data = []
+        
+        for role in roles:
+            # Get chats for this role
+            chats = get_chats_by_role(db, role.id)
+            role_data.append({
+                "role_id": role.id,
+                "role_name": role.name,
+                "chats": [{"chat_id": chat.chat_id, "chat_name": chat.chat_name} for chat in chats]
+            })
+        
+        # Get all chats
+        all_chats = get_chats(db)
+        chat_data = [{"chat_id": chat.chat_id, "chat_name": chat.chat_name} for chat in all_chats]
+        
+        return {
+            "status": "success",
+            "roles": role_data,
+            "all_chats": chat_data
+        }
+    except Exception as e:
+        print(f"Error getting role-chat connections: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get role-chat connections: {str(e)}")
 
 @router.post("/api/users/{user_id}/rehire")
 async def api_rehire_user(
