@@ -313,3 +313,103 @@ class ChatManager:
                 logger.error(f"Error removing user {user_telegram_id} from chat {chat_id}: {e}")
         
         return results
+    
+    async def get_bot_chats(self) -> List[dict]:
+        """
+        Get all chats where bot is a member.
+        
+        Returns:
+            List of chat information dictionaries
+        """
+        try:
+            # Get bot information
+            bot_info = await self.bot.get_me()
+            print(f"Bot info: {bot_info.username}")
+            
+            # Get updates to find chats
+            updates = await self.bot.get_updates(limit=100)
+            chats = []
+            
+            for update in updates:
+                if update.message and update.message.chat:
+                    chat = update.message.chat
+                    if chat.type in ['group', 'supergroup']:
+                        chat_info = {
+                            'id': chat.id,
+                            'title': chat.title,
+                            'type': chat.type,
+                            'username': chat.username,
+                            'invite_link': None
+                        }
+                        
+                        # Try to get invite link
+                        try:
+                            invite_link = await self.bot.export_chat_invite_link(chat.id)
+                            chat_info['invite_link'] = invite_link
+                        except:
+                            pass
+                        
+                        # Avoid duplicates
+                        if not any(c['id'] == chat.id for c in chats):
+                            chats.append(chat_info)
+            
+            print(f"Found {len(chats)} chats")
+            return chats
+            
+        except Exception as e:
+            logger.error(f"Failed to get bot chats: {e}")
+            return []
+    
+    async def sync_chats_to_database(self, db: Session) -> dict:
+        """
+        Sync bot chats to database.
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            Dictionary with sync results
+        """
+        try:
+            from database.crud import create_chat, get_chat_by_chat_id, update_chat
+            
+            # Get all chats where bot is a member
+            bot_chats = await self.get_bot_chats()
+            
+            results = {
+                'total_found': len(bot_chats),
+                'created': 0,
+                'updated': 0,
+                'errors': 0
+            }
+            
+            for chat_data in bot_chats:
+                try:
+                    # Check if chat already exists
+                    existing_chat = get_chat_by_chat_id(db, chat_data['id'])
+                    
+                    if existing_chat:
+                        # Update existing chat
+                        update_chat(db, existing_chat.id, 
+                                  chat_name=chat_data['title'],
+                                  chat_link=chat_data['invite_link'])
+                        results['updated'] += 1
+                    else:
+                        # Create new chat
+                        create_chat(db, 
+                                  chat_name=chat_data['title'],
+                                  chat_link=chat_data['invite_link'],
+                                  chat_id=chat_data['id'],
+                                  description=f"Auto-synced {chat_data['type']} chat")
+                        results['created'] += 1
+                        
+                except Exception as e:
+                    logger.error(f"Error syncing chat {chat_data['id']}: {e}")
+                    results['errors'] += 1
+            
+            db.commit()
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to sync chats to database: {e}")
+            return {'error': str(e)}

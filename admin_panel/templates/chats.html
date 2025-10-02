@@ -34,7 +34,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h2 fw-bold">Чаты</h1>
         <div>
-            <button class="btn btn-primary" onclick="openCreateModal()">
+            <button class="btn btn-success me-2" onclick="syncChats()">
+                <i class="bi bi-robot"></i> Синхронизировать с ботом
+            </button>
+            <button class="btn btn-primary me-2" onclick="openCreateModal()">
                 <i class="bi bi-plus-lg"></i> Добавить чат
             </button>
             <button class="btn btn-outline-secondary" onclick="loadChats()">
@@ -99,6 +102,38 @@
 {% block extra_js %}
 <script>
     let chatModal;
+    
+    async function syncChats() {
+        if (!confirm('Синхронизировать чаты с ботом? Это обновит список чатов, где находится бот.')) {
+            return;
+        }
+        
+        try {
+            const button = event.target;
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Синхронизация...';
+            button.disabled = true;
+            
+            const response = await apiRequest('/api/chats/sync', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                alert(`Синхронизация завершена!\n\nНайдено чатов: ${result.results.total_found}\nСоздано: ${result.results.created}\nОбновлено: ${result.results.updated}\nОшибок: ${result.results.errors}`);
+                loadChats(); // Reload the table
+            } else {
+                const error = await response.json();
+                alert('Ошибка синхронизации: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error syncing chats:', error);
+            alert('Ошибка при синхронизации чатов');
+        } finally {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    }
     
     async function loadChats() {
         try {

@@ -263,6 +263,32 @@ async def api_fire_user(
     
     return {"status": "success", "message": "User fired and removed from all chats"}
 
+@router.post("/api/chats/sync")
+async def api_sync_chats(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Sync bot chats with database."""
+    if not settings.BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    try:
+        from bot.chat_manager import ChatManager
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        # Sync chats to database
+        results = await chat_manager.sync_chats_to_database(db)
+        
+        return {
+            "status": "success", 
+            "message": "Chats synced successfully",
+            "results": results
+        }
+        
+    except Exception as e:
+        print(f"Error syncing chats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync chats: {str(e)}")
+
 @router.post("/api/users/{user_id}/rehire")
 async def api_rehire_user(
     user_id: int,
