@@ -182,15 +182,18 @@
         approveButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Обработка...';
         
         try {
-            const formData = new FormData();
-            formData.append('role_id', roleId);
+            const requestData = {
+                role_id: parseInt(roleId)
+            };
             
-            console.log('Sending approval request:', { userId, roleId });
+            console.log('Sending approval request:', { userId, roleId, requestData });
             
             const response = await apiRequest(`/api/requests/${userId}/approve`, {
                 method: 'POST',
-                headers: {},
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
             });
             
             console.log('Response status:', response.status);

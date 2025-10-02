@@ -1,6 +1,6 @@
 """API routes for admin panel."""
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -135,11 +135,15 @@ async def api_get_users(
 @router.post("/api/requests/{user_id}/approve")
 async def api_approve_request(
     user_id: int,
-    role_id: int = Form(...),
+    request_data: dict,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Approve user request."""
+    role_id = request_data.get('role_id')
+    if not role_id:
+        raise HTTPException(status_code=400, detail="role_id is required")
+    
     user = approve_user(db, user_id, role_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
