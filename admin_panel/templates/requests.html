@@ -70,7 +70,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                <button type="button" class="btn btn-success" onclick="approveUser()">
+                <button type="button" class="btn btn-success" id="approveButton" onclick="approveUser()">
                     <i class="bi bi-check-lg"></i> Одобрить
                 </button>
             </div>
@@ -158,17 +158,28 @@
     
     function openApproveModal(userId) {
         document.getElementById('approveUserId').value = userId;
+        document.getElementById('roleSelect').value = ''; // Сброс выбора роли
         approveModal.show();
     }
     
     async function approveUser() {
         const userId = document.getElementById('approveUserId').value;
         const roleId = document.getElementById('roleSelect').value;
+        const approveButton = document.getElementById('approveButton');
         
         if (!roleId) {
             alert('Пожалуйста, выберите роль');
             return;
         }
+        
+        if (!userId) {
+            alert('Ошибка: ID пользователя не найден');
+            return;
+        }
+        
+        // Блокируем кнопку во время обработки
+        approveButton.disabled = true;
+        approveButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Обработка...';
         
         try {
             const formData = new FormData();
@@ -184,10 +195,17 @@
                 approveModal.hide();
                 loadRequests();
                 alert('Заявка одобрена!');
+            } else {
+                const errorData = await response.json();
+                alert('Ошибка: ' + (errorData.detail || 'Неизвестная ошибка'));
             }
         } catch (error) {
             console.error('Error approving user:', error);
-            alert('Ошибка при одобрении заявки');
+            alert('Ошибка при одобрении заявки: ' + error.message);
+        } finally {
+            // Разблокируем кнопку
+            approveButton.disabled = false;
+            approveButton.innerHTML = '<i class="bi bi-check-lg"></i> Одобрить';
         }
     }
     
