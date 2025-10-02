@@ -6,7 +6,8 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     filters,
-    ContextTypes
+    ContextTypes,
+    CallbackQueryHandler
 )
 from config import settings
 from bot.handlers import (
@@ -56,7 +57,11 @@ def main():
     application.add_handler(MessageHandler(filters.ChatType.GROUPS, handle_message_in_group))
     
     # Add my_chat_member handler for bot add/remove events
-    application.add_handler(MessageHandler(filters.StatusUpdate.MY_CHAT_MEMBER, handle_my_chat_member))
+    # Use a custom filter for my_chat_member updates
+    def my_chat_member_filter(update):
+        return update.my_chat_member is not None
+    
+    application.add_handler(MessageHandler(my_chat_member_filter, handle_my_chat_member))
     
     # Add error handler
     application.add_error_handler(error_handler)
