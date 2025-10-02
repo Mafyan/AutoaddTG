@@ -402,6 +402,33 @@ async def api_stop_auto_sync(
         print(f"Error stopping auto sync: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to stop auto sync: {str(e)}")
 
+@router.post("/api/chats/force-refresh-members")
+async def api_force_refresh_members(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Force refresh members for a specific chat."""
+    if not settings.BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    try:
+        from bot.chat_manager import ChatManager
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        # Get all members from the chat
+        members = await chat_manager.get_chat_members_from_telegram(chat_id)
+        
+        return {
+            "status": "success", 
+            "message": f"Found {len(members)} members in chat {chat_id}",
+            "members": members
+        }
+        
+    except Exception as e:
+        print(f"Error refreshing members: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh members: {str(e)}")
+
 @router.post("/api/users/{user_id}/rehire")
 async def api_rehire_user(
     user_id: int,

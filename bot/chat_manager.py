@@ -453,7 +453,10 @@ class ChatManager:
             
             # Get members from recent messages (this is our main method)
             try:
-                updates = await self.bot.get_updates(limit=200)  # Get more updates
+                # Get more updates to find more members
+                updates = await self.bot.get_updates(limit=500, timeout=30)
+                print(f"DEBUG: Got {len(updates)} updates")
+                
                 for update in updates:
                     if (update.message and 
                         update.message.chat and 
@@ -478,6 +481,43 @@ class ChatManager:
                             }
                             members.append(member_info)
                             print(f"DEBUG: Found member {user.id} ({user.first_name}) from messages")
+                    
+                    # Also check for new chat members
+                    if (update.message and 
+                        update.message.chat and 
+                        update.message.chat.id == chat_id and 
+                        update.message.new_chat_members):
+                        
+                        for user in update.message.new_chat_members:
+                            if user.is_bot:
+                                continue
+                                
+                            if not any(m['id'] == user.id for m in members):
+                                member_info = {
+                                    'id': user.id,
+                                    'username': user.username,
+                                    'first_name': user.first_name,
+                                    'last_name': user.last_name,
+                                    'is_admin': False,
+                                    'is_bot': user.is_bot
+                                }
+                                members.append(member_info)
+                                print(f"DEBUG: Found new member {user.id} ({user.first_name}) from new_chat_members")
+                    
+                    # Check for left chat members
+                    if (update.message and 
+                        update.message.chat and 
+                        update.message.chat.id == chat_id and 
+                        update.message.left_chat_member):
+                        
+                        user = update.message.left_chat_member
+                        if user.is_bot:
+                            continue
+                            
+                        # Remove from our list if present
+                        members = [m for m in members if m['id'] != user.id]
+                        print(f"DEBUG: Removed left member {user.id} ({user.first_name})")
+                        
             except Exception as e:
                 print(f"DEBUG: Could not get members from messages: {e}")
             
