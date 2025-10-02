@@ -327,39 +327,117 @@ class ChatManager:
             bot_info = await self.bot.get_me()
             print(f"Bot info: {bot_info.username}")
             
-            # Get updates to find chats
-            updates = await self.bot.get_updates(limit=100)
             chats = []
+            chat_ids = set()
+            
+            # Method 1: Get updates to find chats
+            print("DEBUG: Searching chats via updates...")
+            updates = await self.bot.get_updates(limit=100)
             
             for update in updates:
                 if update.message and update.message.chat:
                     chat = update.message.chat
-                    if chat.type in ['group', 'supergroup']:
-                        chat_info = {
-                            'id': chat.id,
-                            'title': chat.title,
-                            'type': chat.type,
-                            'username': chat.username,
-                            'invite_link': None
-                        }
-                        
-                        # Try to get invite link
-                        try:
-                            invite_link = await self.bot.export_chat_invite_link(chat.id)
-                            chat_info['invite_link'] = invite_link
-                        except:
-                            pass
-                        
-                        # Avoid duplicates
-                        if not any(c['id'] == chat.id for c in chats):
+                    if chat.type in ['group', 'supergroup'] and chat.id not in chat_ids:
+                        chat_info = await self._get_chat_info(chat.id, chat.title, chat.type, chat.username)
+                        if chat_info:
                             chats.append(chat_info)
+                            chat_ids.add(chat.id)
             
-            print(f"Found {len(chats)} chats")
+            print(f"DEBUG: Found {len(chats)} chats via updates")
+            
+            # Method 2: Try to get more updates with different offsets
+            print("DEBUG: Searching chats via multiple update batches...")
+            for offset in range(100, 1000, 100):
+                try:
+                    more_updates = await self.bot.get_updates(limit=100, offset=offset)
+                    if not more_updates:
+                        break
+                        
+                    for update in more_updates:
+                        if update.message and update.message.chat:
+                            chat = update.message.chat
+                            if chat.type in ['group', 'supergroup'] and chat.id not in chat_ids:
+                                chat_info = await self._get_chat_info(chat.id, chat.title, chat.type, chat.username)
+                                if chat_info:
+                                    chats.append(chat_info)
+                                    chat_ids.add(chat.id)
+                except Exception as e:
+                    print(f"DEBUG: Error getting updates at offset {offset}: {e}")
+                    break
+            
+            print(f"DEBUG: Total found {len(chats)} chats after multiple batches")
+            
+            # Method 3: Try to get chat by known chat IDs from database
+            print("DEBUG: Checking known chat IDs from database...")
+            try:
+                from database.database import SessionLocal
+                db = SessionLocal()
+                from database.crud import get_chats
+                known_chats = get_chats(db)
+                db.close()
+                
+                for known_chat in known_chats:
+                    if known_chat.chat_id and known_chat.chat_id not in chat_ids:
+                        try:
+                            # Try to get chat info
+                            chat_info = await self.bot.get_chat(known_chat.chat_id)
+                            if chat_info.type in ['group', 'supergroup']:
+                                chat_info_dict = await self._get_chat_info(
+                                    chat_info.id, 
+                                    chat_info.title, 
+                                    chat_info.type, 
+                                    getattr(chat_info, 'username', None)
+                                )
+                                if chat_info_dict:
+                                    chats.append(chat_info_dict)
+                                    chat_ids.add(chat_info.id)
+                                    print(f"DEBUG: Found known chat: {chat_info.title}")
+                        except Exception as e:
+                            print(f"DEBUG: Could not access known chat {known_chat.chat_id}: {e}")
+            except Exception as e:
+                print(f"DEBUG: Error checking known chats: {e}")
+            
+            print(f"DEBUG: Final result: {len(chats)} chats found")
             return chats
             
         except Exception as e:
             logger.error(f"Failed to get bot chats: {e}")
             return []
+    
+    async def _get_chat_info(self, chat_id: int, title: str, chat_type: str, username: str = None) -> dict:
+        """
+        Get detailed chat information.
+        
+        Args:
+            chat_id: Chat ID
+            title: Chat title
+            chat_type: Chat type
+            username: Chat username
+            
+        Returns:
+            Chat information dictionary or None if error
+        """
+        try:
+            chat_info = {
+                'id': chat_id,
+                'title': title,
+                'type': chat_type,
+                'username': username,
+                'invite_link': None
+            }
+            
+            # Try to get invite link
+            try:
+                invite_link = await self.bot.export_chat_invite_link(chat_id)
+                chat_info['invite_link'] = invite_link
+            except Exception as e:
+                print(f"DEBUG: Could not get invite link for chat {chat_id}: {e}")
+            
+            return chat_info
+            
+        except Exception as e:
+            print(f"DEBUG: Error getting chat info for {chat_id}: {e}")
+            return None
     
     async def sync_chats_to_database(self, db: Session) -> dict:
         """
