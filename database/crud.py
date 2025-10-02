@@ -238,6 +238,15 @@ def verify_admin_password(admin: Admin, password: str) -> bool:
     """Verify admin password."""
     return pwd_context.verify(password, admin.password_hash)
 
+def authenticate_admin(username: str, password: str, db: Session):
+    """Authenticate admin user."""
+    admin = get_admin_by_username(db, username)
+    if not admin:
+        return None
+    if not verify_admin_password(admin, password):
+        return None
+    return admin
+
 def update_admin_password(db: Session, admin_id: int, new_password: str) -> bool:
     """Update admin password."""
     admin = db.query(Admin).filter(Admin.id == admin_id).first()
