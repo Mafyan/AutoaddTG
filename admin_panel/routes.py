@@ -140,13 +140,21 @@ async def api_approve_request(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Approve user request."""
+    print(f"DEBUG: Received approval request for user {user_id}")
+    print(f"DEBUG: Request data: {request_data}")
+    
     role_id = request_data.get('role_id')
     if not role_id:
+        print(f"DEBUG: Missing role_id in request")
         raise HTTPException(status_code=400, detail="role_id is required")
     
+    print(f"DEBUG: Approving user {user_id} with role {role_id}")
     user = approve_user(db, user_id, role_id)
     if not user:
+        print(f"DEBUG: User {user_id} not found")
         raise HTTPException(status_code=404, detail="User not found")
+    
+    print(f"DEBUG: User {user_id} approved successfully")
     
     # Send notification to user via Telegram
     if user.telegram_id and settings.BOT_TOKEN:

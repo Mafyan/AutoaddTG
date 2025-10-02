@@ -187,6 +187,7 @@
             };
             
             console.log('Sending approval request:', { userId, roleId, requestData });
+            console.log('JSON body:', JSON.stringify(requestData));
             
             const response = await apiRequest(`/api/requests/${userId}/approve`, {
                 method: 'POST',
@@ -197,6 +198,7 @@
             });
             
             console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
             
             if (response.ok) {
                 approveModal.hide();
