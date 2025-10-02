@@ -226,17 +226,25 @@ async def api_fire_user(
     # Remove user from all Telegram chats
     if user.telegram_id and settings.BOT_TOKEN:
         try:
+            print(f"DEBUG: Starting fire process for user {user_id} with telegram_id {user.telegram_id}")
+            
             from bot.chat_manager import ChatManager
             chat_manager = ChatManager(settings.BOT_TOKEN)
             
             # Get all chats where user is a member
             user_chats = get_user_chats(db, user.telegram_id)
+            print(f"DEBUG: Found {len(user_chats)} chat memberships for user")
+            
             chat_ids = [chat.chat_id for chat in user_chats if chat.is_active == 'active']
+            print(f"DEBUG: Active chat IDs: {chat_ids}")
             
             if chat_ids:
                 # Remove user from all chats
+                print(f"DEBUG: Attempting to remove user from {len(chat_ids)} chats")
                 removal_results = await chat_manager.remove_user_from_all_chats(user.telegram_id, chat_ids)
-                print(f"Removal results: {removal_results}")
+                print(f"DEBUG: Removal results: {removal_results}")
+            else:
+                print("DEBUG: No active chats found for user")
             
             # Send notification to user
             bot = Bot(token=settings.BOT_TOKEN)
@@ -246,9 +254,12 @@ async def api_fire_user(
                 "Обратитесь к администратору для получения дополнительной информации."
             )
             await bot.send_message(chat_id=user.telegram_id, text=message)
+            print(f"DEBUG: Notification sent to user {user.telegram_id}")
             
         except Exception as e:
-            print(f"Failed to remove user from chats or send notification: {e}")
+            print(f"ERROR: Failed to remove user from chats or send notification: {e}")
+            import traceback
+            traceback.print_exc()
     
     return {"status": "success", "message": "User fired and removed from all chats"}
 
