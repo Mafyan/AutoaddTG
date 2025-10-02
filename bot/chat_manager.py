@@ -363,16 +363,21 @@ class ChatManager:
                 try:
                     user_telegram_id = member['id']
                     
+                    # Skip bots
+                    if member.get('is_bot', False):
+                        print(f"DEBUG: Skipping bot {user_telegram_id}")
+                        continue
+                    
                     # Check if user is authorized
                     if user_telegram_id in authorized_telegram_ids:
                         # User is authorized - add/update in database
                         add_chat_member(db, chat_id, user_telegram_id, 
                                       member.get('username'), member.get('first_name'), member.get('last_name'))
                         results['authorized_members'] += 1
-                        print(f"DEBUG: Authorized user {user_telegram_id} in chat {chat_id}")
+                        print(f"DEBUG: Authorized user {user_telegram_id} ({member.get('first_name')}) in chat {chat_id}")
                     else:
                         # User is not authorized - remove from chat
-                        print(f"DEBUG: User {user_telegram_id} is NOT authorized, attempting to remove...")
+                        print(f"DEBUG: User {user_telegram_id} ({member.get('first_name')}) is NOT authorized, attempting to remove...")
                         try:
                             # First try to ban the user
                             await self.bot.ban_chat_member(chat_id, user_telegram_id)
@@ -411,24 +416,44 @@ class ChatManager:
             List of member information dictionaries
         """
         try:
-            # Get chat administrators first
-            administrators = await self.bot.get_chat_administrators(chat_id)
             members = []
             
-            for admin in administrators:
-                member_info = {
-                    'id': admin.user.id,
-                    'username': admin.user.username,
-                    'first_name': admin.user.first_name,
-                    'last_name': admin.user.last_name,
-                    'is_admin': True
-                }
-                members.append(member_info)
-            
-            # Try to get all members (this might not work for large groups)
+            # Get chat administrators first
             try:
-                # This is a workaround - we'll get members from recent messages
-                updates = await self.bot.get_updates(limit=100)
+                administrators = await self.bot.get_chat_administrators(chat_id)
+                for admin in administrators:
+                    # Skip bots
+                    if admin.user.is_bot:
+                        continue
+                        
+                    member_info = {
+                        'id': admin.user.id,
+                        'username': admin.user.username,
+                        'first_name': admin.user.first_name,
+                        'last_name': admin.user.last_name,
+                        'is_admin': True,
+                        'is_bot': admin.user.is_bot
+                    }
+                    members.append(member_info)
+                    print(f"DEBUG: Found admin {admin.user.id} ({admin.user.first_name})")
+            except Exception as e:
+                print(f"DEBUG: Could not get administrators: {e}")
+            
+            # Try to get all members using get_chat_member_count and iterate
+            try:
+                # Get chat member count
+                member_count = await self.bot.get_chat_member_count(chat_id)
+                print(f"DEBUG: Chat {chat_id} has {member_count} members")
+                
+                # For now, we'll use a different approach - get members from recent activity
+                # This is a limitation of Telegram API - we can't get all members directly
+                
+            except Exception as e:
+                print(f"DEBUG: Could not get member count: {e}")
+            
+            # Get members from recent messages (this is our main method)
+            try:
+                updates = await self.bot.get_updates(limit=200)  # Get more updates
                 for update in updates:
                     if (update.message and 
                         update.message.chat and 
@@ -436,6 +461,11 @@ class ChatManager:
                         update.message.from_user):
                         
                         user = update.message.from_user
+                        
+                        # Skip bots
+                        if user.is_bot:
+                            continue
+                            
                         # Check if we already have this user
                         if not any(m['id'] == user.id for m in members):
                             member_info = {
@@ -443,12 +473,15 @@ class ChatManager:
                                 'username': user.username,
                                 'first_name': user.first_name,
                                 'last_name': user.last_name,
-                                'is_admin': False
+                                'is_admin': False,
+                                'is_bot': user.is_bot
                             }
                             members.append(member_info)
+                            print(f"DEBUG: Found member {user.id} ({user.first_name}) from messages")
             except Exception as e:
-                print(f"DEBUG: Could not get all members from messages: {e}")
+                print(f"DEBUG: Could not get members from messages: {e}")
             
+            print(f"DEBUG: Total members found: {len(members)}")
             return members
             
         except Exception as e:

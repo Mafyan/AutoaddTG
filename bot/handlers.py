@@ -523,3 +523,63 @@ async def sync_members_command(update: Update, context: ContextTypes.DEFAULT_TYP
     finally:
         db.close()
 
+async def refresh_members_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /refreshmembers command for admins - force refresh chat members."""
+    user = update.effective_user
+    db = SessionLocal()
+    
+    try:
+        # Check if user is admin
+        admin = get_admin_by_telegram_id(db, user.id)
+        if not admin:
+            await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
+            return
+        
+        # Get chat ID from command arguments or current chat
+        chat_id = None
+        if context.args:
+            try:
+                chat_id = int(context.args[0])
+            except ValueError:
+                await update.message.reply_text("❌ Неверный формат Chat ID. Используйте: /refreshmembers <chat_id>")
+                return
+        else:
+            # Use current chat if it's a group
+            if update.effective_chat.type in ['group', 'supergroup']:
+                chat_id = update.effective_chat.id
+            else:
+                await update.message.reply_text("❌ Укажите Chat ID: /refreshmembers <chat_id>")
+                return
+        
+        await update.message.reply_text(f"🔄 Принудительно обновляю список участников чата {chat_id}...")
+        
+        # Force refresh chat members
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        # Get all members from recent activity
+        members = await chat_manager.get_chat_members_from_telegram(chat_id)
+        
+        message = f"📋 **Найдено участников в чате {chat_id}:**\n\n"
+        
+        for i, member in enumerate(members, 1):
+            message += f"{i}. **{member.get('first_name', 'Unknown')}**\n"
+            message += f"   ID: `{member['id']}`\n"
+            if member.get('username'):
+                message += f"   Username: @{member['username']}\n"
+            message += f"   Admin: {'Да' if member.get('is_admin') else 'Нет'}\n"
+            message += f"   Bot: {'Да' if member.get('is_bot') else 'Нет'}\n\n"
+        
+        # Split message if too long
+        if len(message) > 4000:
+            chunks = [message[i:i+4000] for i in range(0, len(message), 4000)]
+            for chunk in chunks:
+                await update.message.reply_text(chunk, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(message, parse_mode='Markdown')
+            
+    except Exception as e:
+        logger.error(f"Error in refresh_members_command: {e}")
+        await update.message.reply_text("❌ Ошибка при обновлении списка участников.")
+    finally:
+        db.close()
+
