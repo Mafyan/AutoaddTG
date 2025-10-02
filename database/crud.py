@@ -92,10 +92,20 @@ def count_users_by_status(db: Session, status: str) -> int:
     return db.query(User).filter(User.status == status).count()
 
 def fire_user(db: Session, user_id: int) -> Optional[User]:
-    """Fire user (change status to fired)."""
+    """Fire user (change status to fired) and remove from all chats."""
     user = get_user_by_id(db, user_id)
     if user:
+        # Mark user as fired
         user.status = 'fired'
+        
+        # Remove user from all chats
+        if user.telegram_id:
+            # Get all chats where user is a member
+            user_chats = get_user_chats(db, user.telegram_id)
+            for chat_member in user_chats:
+                # Mark as left in database
+                chat_member.is_active = 'left'
+        
         db.commit()
         db.refresh(user)
     return user

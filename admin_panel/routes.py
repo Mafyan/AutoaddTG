@@ -13,7 +13,8 @@ from database.crud import (
     get_users, get_user_by_id, approve_user, reject_user, delete_user, update_user,
     get_roles, get_role_by_id, create_role, update_role, delete_role, assign_chats_to_role,
     get_chats, get_chat_by_id, create_chat, update_chat, delete_chat,
-    get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users
+    get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users,
+    get_user_chats
 )
 from database.models import Admin
 from admin_panel.auth import create_access_token, get_current_admin
@@ -222,9 +223,22 @@ async def api_fire_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Send notification to user via Telegram
+    # Remove user from all Telegram chats
     if user.telegram_id and settings.BOT_TOKEN:
         try:
+            from bot.chat_manager import ChatManager
+            chat_manager = ChatManager(settings.BOT_TOKEN)
+            
+            # Get all chats where user is a member
+            user_chats = get_user_chats(db, user.telegram_id)
+            chat_ids = [chat.chat_id for chat in user_chats if chat.is_active == 'active']
+            
+            if chat_ids:
+                # Remove user from all chats
+                removal_results = await chat_manager.remove_user_from_all_chats(user.telegram_id, chat_ids)
+                print(f"Removal results: {removal_results}")
+            
+            # Send notification to user
             bot = Bot(token=settings.BOT_TOKEN)
             message = (
                 "🚫 Ваш доступ к системе был отозван.\n\n"
@@ -232,10 +246,11 @@ async def api_fire_user(
                 "Обратитесь к администратору для получения дополнительной информации."
             )
             await bot.send_message(chat_id=user.telegram_id, text=message)
-        except TelegramError as e:
-            print(f"Failed to send notification: {e}")
+            
+        except Exception as e:
+            print(f"Failed to remove user from chats or send notification: {e}")
     
-    return {"status": "success", "message": "User fired"}
+    return {"status": "success", "message": "User fired and removed from all chats"}
 
 @router.post("/api/users/{user_id}/rehire")
 async def api_rehire_user(

@@ -264,3 +264,52 @@ class ChatManager:
         except TelegramError as e:
             logger.error(f"Failed to get chat member count: {e}")
             return 0
+    
+    async def remove_user_from_chat(self, chat_id: int, user_telegram_id: int) -> bool:
+        """
+        Remove user from specific chat.
+        
+        Args:
+            chat_id: Telegram chat ID
+            user_telegram_id: User's Telegram ID
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Try to kick user from chat
+            await self.bot.ban_chat_member(chat_id, user_telegram_id)
+            logger.info(f"Successfully removed user {user_telegram_id} from chat {chat_id}")
+            return True
+        except TelegramError as e:
+            logger.error(f"Failed to remove user {user_telegram_id} from chat {chat_id}: {e}")
+            return False
+    
+    async def remove_user_from_all_chats(self, user_telegram_id: int, chat_ids: List[int]) -> dict:
+        """
+        Remove user from all specified chats.
+        
+        Args:
+            user_telegram_id: User's Telegram ID
+            chat_ids: List of chat IDs to remove user from
+            
+        Returns:
+            Dictionary with results for each chat
+        """
+        results = {}
+        
+        for chat_id in chat_ids:
+            try:
+                success = await self.remove_user_from_chat(chat_id, user_telegram_id)
+                results[chat_id] = {
+                    'success': success,
+                    'error': None if success else 'Failed to remove user'
+                }
+            except Exception as e:
+                results[chat_id] = {
+                    'success': False,
+                    'error': str(e)
+                }
+                logger.error(f"Error removing user {user_telegram_id} from chat {chat_id}: {e}")
+        
+        return results
