@@ -332,6 +332,17 @@ class ChatManager:
         try:
             from database.crud import get_user_by_telegram_id, add_chat_member, remove_chat_member
             
+            # Check if bot has admin rights in chat
+            try:
+                bot_member = await self.bot.get_chat_member(chat_id, self.bot.id)
+                print(f"DEBUG: Bot status in chat {chat_id}: {bot_member.status}")
+                if bot_member.status not in ['administrator', 'creator']:
+                    print(f"DEBUG: Bot is not admin in chat {chat_id}, skipping...")
+                    return {'error': 'Bot is not admin in chat'}
+            except Exception as e:
+                print(f"DEBUG: Could not check bot status in chat {chat_id}: {e}")
+                return {'error': f'Could not access chat: {e}'}
+            
             # Get all chat members from Telegram
             chat_members = await self.get_chat_members_from_telegram(chat_id)
             print(f"DEBUG: Found {len(chat_members)} members in chat {chat_id}")
@@ -339,6 +350,7 @@ class ChatManager:
             # Get authorized users from database
             authorized_users = db.query(User).filter(User.status == 'approved').all()
             authorized_telegram_ids = {user.telegram_id for user in authorized_users if user.telegram_id}
+            print(f"DEBUG: Found {len(authorized_telegram_ids)} authorized users in database")
             
             results = {
                 'total_members': len(chat_members),
@@ -360,13 +372,22 @@ class ChatManager:
                         print(f"DEBUG: Authorized user {user_telegram_id} in chat {chat_id}")
                     else:
                         # User is not authorized - remove from chat
+                        print(f"DEBUG: User {user_telegram_id} is NOT authorized, attempting to remove...")
                         try:
-                            await self.remove_user_from_chat(chat_id, user_telegram_id)
+                            # First try to ban the user
+                            await self.bot.ban_chat_member(chat_id, user_telegram_id)
+                            print(f"DEBUG: Successfully banned unauthorized user {user_telegram_id} from chat {chat_id}")
                             results['removed_unauthorized'] += 1
-                            print(f"DEBUG: Removed unauthorized user {user_telegram_id} from chat {chat_id}")
                         except Exception as e:
-                            print(f"DEBUG: Could not remove user {user_telegram_id}: {e}")
-                            results['errors'] += 1
+                            print(f"DEBUG: Could not ban user {user_telegram_id}: {e}")
+                            # Try to kick instead
+                            try:
+                                await self.bot.kick_chat_member(chat_id, user_telegram_id)
+                                print(f"DEBUG: Successfully kicked unauthorized user {user_telegram_id} from chat {chat_id}")
+                                results['removed_unauthorized'] += 1
+                            except Exception as e2:
+                                print(f"DEBUG: Could not kick user {user_telegram_id}: {e2}")
+                                results['errors'] += 1
                             
                 except Exception as e:
                     print(f"DEBUG: Error processing member {member}: {e}")
