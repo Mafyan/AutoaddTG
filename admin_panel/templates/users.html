@@ -137,7 +137,8 @@
                 const badges = {
                     'pending': '<span class="badge badge-pending">Ожидает</span>',
                     'approved': '<span class="badge badge-approved">Одобрено</span>',
-                    'rejected': '<span class="badge badge-rejected">Отклонено</span>'
+                    'rejected': '<span class="badge badge-rejected">Отклонено</span>',
+                    'fired': '<span class="badge bg-danger">Уволен</span>'
                 };
                 return badges[status] || status;
             };
@@ -171,6 +172,15 @@
                                         <button class="btn btn-sm btn-outline-primary me-1" onclick="openEditModal(${user.id}, '${user.role?.id || ''}', '${user.status}')">
                                             <i class="bi bi-pencil"></i>
                                         </button>
+                                        ${user.status === 'approved' ? 
+                                            `<button class="btn btn-sm btn-outline-warning me-1" onclick="fireUser(${user.id})">
+                                                <i class="bi bi-person-x"></i> Уволить
+                                            </button>` : 
+                                            user.status === 'fired' ?
+                                            `<button class="btn btn-sm btn-outline-success me-1" onclick="rehireUser(${user.id})">
+                                                <i class="bi bi-person-check"></i> Восстановить
+                                            </button>` : ''
+                                        }
                                         <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${user.id})">
                                             <i class="bi bi-trash"></i>
                                         </button>
@@ -222,6 +232,46 @@
         } catch (error) {
             console.error('Error updating user:', error);
             alert('Ошибка при обновлении пользователя');
+        }
+    }
+    
+    async function fireUser(userId) {
+        if (!confirm('Вы уверены, что хотите уволить этого сотрудника? Он будет удален из всех чатов.')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/users/${userId}/fire`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                loadUsers();
+                alert('Сотрудник уволен и удален из всех чатов');
+            }
+        } catch (error) {
+            console.error('Error firing user:', error);
+            alert('Ошибка при увольнении сотрудника');
+        }
+    }
+    
+    async function rehireUser(userId) {
+        if (!confirm('Вы уверены, что хотите восстановить этого сотрудника?')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/users/${userId}/rehire`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                loadUsers();
+                alert('Сотрудник восстановлен');
+            }
+        } catch (error) {
+            console.error('Error rehiring user:', error);
+            alert('Ошибка при восстановлении сотрудника');
         }
     }
     

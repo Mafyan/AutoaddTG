@@ -7,8 +7,11 @@ from database.crud import (
     get_user_by_telegram_id,
     get_user_by_phone,
     create_user,
-    get_chats_by_role
+    get_chats_by_role,
+    add_chat_member
 )
+from bot.chat_manager import ChatManager
+from config import settings
 from bot.keyboards import get_phone_keyboard, get_remove_keyboard
 from bot.utils import normalize_phone, validate_phone, format_chat_links
 
@@ -125,6 +128,12 @@ async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "❓ Вы еще не зарегистрированы.\n\n"
                 "Используйте команду /start для начала работы.",
+                reply_markup=get_remove_keyboard()
+            )
+        elif existing_user.status == 'fired':
+            await update.message.reply_text(
+                "🚫 Ваш доступ к системе был отозван.\n\n"
+                "Обратитесь к администратору для получения дополнительной информации.",
                 reply_markup=get_remove_keyboard()
             )
         elif existing_user.status != 'approved':

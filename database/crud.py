@@ -1,8 +1,9 @@
 """CRUD operations for database models."""
 from typing import List, Optional
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from database.models import User, Role, Chat, Admin
+from database.models import User, Role, Chat, Admin, ChatMember
 from passlib.context import CryptContext
 
 # Password hashing
@@ -89,6 +90,19 @@ def delete_user(db: Session, user_id: int) -> bool:
 def count_users_by_status(db: Session, status: str) -> int:
     """Count users by status."""
     return db.query(User).filter(User.status == status).count()
+
+def fire_user(db: Session, user_id: int) -> Optional[User]:
+    """Fire user (change status to fired)."""
+    user = get_user_by_id(db, user_id)
+    if user:
+        user.status = 'fired'
+        db.commit()
+        db.refresh(user)
+    return user
+
+def get_fired_users(db: Session, skip: int = 0, limit: int = 100) -> List[User]:
+    """Get list of fired users."""
+    return db.query(User).filter(User.status == 'fired').offset(skip).limit(limit).all()
 
 # ==================== ROLE OPERATIONS ====================
 
@@ -235,6 +249,66 @@ def update_admin_password(db: Session, admin_id: int, new_password: str) -> bool
 
 # ==================== STATISTICS ====================
 
+# ==================== CHAT MEMBER OPERATIONS ====================
+
+def add_chat_member(db: Session, chat_id: int, user_telegram_id: int,
+                   username: Optional[str] = None, first_name: Optional[str] = None,
+                   last_name: Optional[str] = None) -> ChatMember:
+    """Add user to chat members list."""
+    # Check if already exists
+    existing = db.query(ChatMember).filter(
+        ChatMember.chat_id == chat_id,
+        ChatMember.user_telegram_id == user_telegram_id
+    ).first()
+    
+    if existing:
+        existing.is_active = 'active'
+        existing.joined_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
+    
+    member = ChatMember(
+        chat_id=chat_id,
+        user_telegram_id=user_telegram_id,
+        username=username,
+        first_name=first_name,
+        last_name=last_name
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return member
+
+def remove_chat_member(db: Session, chat_id: int, user_telegram_id: int) -> bool:
+    """Mark user as left chat."""
+    member = db.query(ChatMember).filter(
+        ChatMember.chat_id == chat_id,
+        ChatMember.user_telegram_id == user_telegram_id
+    ).first()
+    
+    if member:
+        member.is_active = 'left'
+        db.commit()
+        return True
+    return False
+
+def get_chat_members(db: Session, chat_id: int) -> List[ChatMember]:
+    """Get all active members of a chat."""
+    return db.query(ChatMember).filter(
+        ChatMember.chat_id == chat_id,
+        ChatMember.is_active == 'active'
+    ).all()
+
+def get_user_chats(db: Session, user_telegram_id: int) -> List[ChatMember]:
+    """Get all chats where user is a member."""
+    return db.query(ChatMember).filter(
+        ChatMember.user_telegram_id == user_telegram_id,
+        ChatMember.is_active == 'active'
+    ).all()
+
+# ==================== STATISTICS ====================
+
 def get_statistics(db: Session) -> dict:
     """Get general statistics."""
     return {
@@ -242,6 +316,7 @@ def get_statistics(db: Session) -> dict:
         "pending_requests": count_users_by_status(db, 'pending'),
         "approved_users": count_users_by_status(db, 'approved'),
         "rejected_users": count_users_by_status(db, 'rejected'),
+        "fired_users": count_users_by_status(db, 'fired'),
         "total_roles": db.query(Role).count(),
         "total_chats": db.query(Chat).count(),
     }

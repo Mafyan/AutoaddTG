@@ -25,7 +25,7 @@ class User(Base):
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
     role_id = Column(Integer, ForeignKey('roles.id', ondelete='SET NULL'), nullable=True)
-    status = Column(String(20), default='pending')  # pending, approved, rejected
+    status = Column(String(20), default='pending')  # pending, approved, rejected, fired
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -84,4 +84,21 @@ class Admin(Base):
     
     def __repr__(self):
         return f"<Admin {self.username}>"
+
+class ChatMember(Base):
+    """Model for tracking chat members."""
+    
+    __tablename__ = "chat_members"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    chat_id = Column(BigInteger, nullable=False, index=True)
+    user_telegram_id = Column(BigInteger, nullable=False, index=True)
+    username = Column(String(255), nullable=True)
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(String(10), default='active')  # active, left, kicked
+    
+    def __repr__(self):
+        return f"<ChatMember {self.user_telegram_id} in {self.chat_id}>"
 

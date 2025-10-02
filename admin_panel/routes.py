@@ -13,7 +13,7 @@ from database.crud import (
     get_users, get_user_by_id, approve_user, reject_user, delete_user, update_user,
     get_roles, get_role_by_id, create_role, update_role, delete_role, assign_chats_to_role,
     get_chats, get_chat_by_id, create_chat, update_chat, delete_chat,
-    get_chats_by_role, get_statistics, authenticate_admin
+    get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users
 )
 from database.models import Admin
 from admin_panel.auth import create_access_token, get_current_admin
@@ -198,6 +198,57 @@ async def api_update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return {"status": "success", "message": "User updated"}
+
+@router.post("/api/users/{user_id}/fire")
+async def api_fire_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Fire user and remove from all chats."""
+    user = fire_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Send notification to user via Telegram
+    if user.telegram_id and settings.BOT_TOKEN:
+        try:
+            bot = Bot(token=settings.BOT_TOKEN)
+            message = (
+                "🚫 Ваш доступ к системе был отозван.\n\n"
+                "Вы были удалены из всех корпоративных чатов.\n"
+                "Обратитесь к администратору для получения дополнительной информации."
+            )
+            await bot.send_message(chat_id=user.telegram_id, text=message)
+        except TelegramError as e:
+            print(f"Failed to send notification: {e}")
+    
+    return {"status": "success", "message": "User fired"}
+
+@router.post("/api/users/{user_id}/rehire")
+async def api_rehire_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Rehire user (restore access)."""
+    user = update_user(db, user_id, status='approved')
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Send notification to user via Telegram
+    if user.telegram_id and settings.BOT_TOKEN:
+        try:
+            bot = Bot(token=settings.BOT_TOKEN)
+            message = (
+                "✅ Ваш доступ к системе восстановлен!\n\n"
+                "Используйте команду /mychats чтобы получить ссылки на ваши чаты."
+            )
+            await bot.send_message(chat_id=user.telegram_id, text=message)
+        except TelegramError as e:
+            print(f"Failed to send notification: {e}")
+    
+    return {"status": "success", "message": "User rehired"}
 
 @router.delete("/api/users/{user_id}")
 async def api_delete_user(
