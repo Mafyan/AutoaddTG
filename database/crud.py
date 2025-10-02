@@ -244,6 +244,10 @@ def get_admin_by_username(db: Session, username: str) -> Optional[Admin]:
     """Get admin by username."""
     return db.query(Admin).filter(Admin.username == username).first()
 
+def get_admin_by_telegram_id(db: Session, telegram_id: int) -> Optional[Admin]:
+    """Get admin by Telegram ID."""
+    return db.query(Admin).filter(Admin.telegram_id == telegram_id).first()
+
 def verify_admin_password(admin: Admin, password: str) -> bool:
     """Verify admin password."""
     return pwd_context.verify(password, admin.password_hash)
