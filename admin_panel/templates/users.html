@@ -173,7 +173,10 @@
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                         ${user.status === 'approved' ? 
-                                            `<button class="btn btn-sm btn-outline-warning me-1" onclick="fireUser(${user.id})">
+                                            `<button class="btn btn-sm btn-outline-info me-1" onclick="viewUserChats(${user.id})">
+                                                <i class="bi bi-chat-dots"></i> Чаты
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-warning me-1" onclick="fireUser(${user.id})">
                                                 <i class="bi bi-person-x"></i> Уволить
                                             </button>` : 
                                             user.status === 'fired' ?
@@ -273,6 +276,121 @@
         } catch (error) {
             console.error('Error rehiring user:', error);
             alert('Ошибка при восстановлении сотрудника');
+        }
+    }
+    
+    async function viewUserChats(userId) {
+        try {
+            const response = await apiRequest(`/api/users/${userId}/chats`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                showUserChatsModal(data.memberships, userId);
+            } else {
+                alert('Ошибка загрузки чатов: ' + data.detail);
+            }
+        } catch (error) {
+            console.error('Error loading user chats:', error);
+            alert('Ошибка при загрузке чатов пользователя');
+        }
+    }
+    
+    function showUserChatsModal(memberships, userId) {
+        let modalHtml = `
+            <div class="modal fade" id="userChatsModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Чаты пользователя</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+        `;
+        
+        if (memberships.length === 0) {
+            modalHtml += '<p class="text-muted">Пользователь не состоит ни в одном чате.</p>';
+        } else {
+            modalHtml += `
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Название чата</th>
+                                <th>Chat ID</th>
+                                <th>Дата вступления</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            memberships.forEach(membership => {
+                modalHtml += `
+                    <tr>
+                        <td>${membership.chat_name}</td>
+                        <td><code>${membership.chat_id}</code></td>
+                        <td>${new Date(membership.joined_at).toLocaleString('ru-RU')}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeUserFromChat(${userId}, ${membership.chat_id})">
+                                <i class="bi bi-person-x"></i> Удалить
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            modalHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        modalHtml += `
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('userChatsModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('userChatsModal'));
+        modal.show();
+    }
+    
+    async function removeUserFromChat(userId, chatId) {
+        if (!confirm('Удалить пользователя из этого чата?')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/users/${userId}/remove-from-chat?chat_id=${chatId}`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                alert('Пользователь удален из чата!');
+                // Refresh the modal
+                viewUserChats(userId);
+            } else {
+                const error = await response.json();
+                alert('Ошибка: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error removing user from chat:', error);
+            alert('Ошибка при удалении пользователя из чата');
         }
     }
     

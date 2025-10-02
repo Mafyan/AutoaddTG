@@ -14,7 +14,7 @@ from database.crud import (
     get_roles, get_role_by_id, create_role, update_role, delete_role, assign_chats_to_role,
     get_chats, get_chat_by_id, create_chat, update_chat, delete_chat,
     get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users,
-    get_user_chats
+    get_user_chats, add_user_to_role_chats, get_user_chat_memberships
 )
 from database.models import Admin
 from admin_panel.auth import create_access_token, get_current_admin
@@ -160,6 +160,11 @@ async def api_approve_request(
     # Add user to all chats for this role
     if user.telegram_id:
         try:
+            # Add user to role chats in database
+            success = add_user_to_role_chats(db, user_id)
+            print(f"DEBUG: Added user to role chats: {success}")
+            
+            # Try to add to actual Telegram chats
             from bot.chat_manager import ChatManager
             chat_manager = ChatManager(settings.BOT_TOKEN)
             
@@ -167,23 +172,17 @@ async def api_approve_request(
             chats = get_chats_by_role(db, role_id)
             print(f"DEBUG: Found {len(chats)} chats for role {role_id}")
             
-            # Add user to each chat
+            # Add user to each Telegram chat
             for chat in chats:
                 if chat.chat_id:  # Only if chat has Telegram ID
                     try:
-                        # Add to database
-                        add_chat_member(db, chat.chat_id, user.telegram_id, 
-                                      user.username, user.first_name, user.last_name)
-                        print(f"DEBUG: Added user {user.telegram_id} to chat {chat.chat_id}")
-                        
-                        # Try to add to actual Telegram chat
                         success = await chat_manager.add_user_to_chat(chat.chat_id, user.telegram_id)
                         if success:
                             print(f"DEBUG: Successfully added user to Telegram chat {chat.chat_id}")
                         else:
                             print(f"DEBUG: Failed to add user to Telegram chat {chat.chat_id}")
                     except Exception as e:
-                        print(f"DEBUG: Error adding user to chat {chat.chat_id}: {e}")
+                        print(f"DEBUG: Error adding user to Telegram chat {chat.chat_id}: {e}")
         except Exception as e:
             print(f"DEBUG: Error in chat management: {e}")
     
@@ -428,6 +427,64 @@ async def api_force_refresh_members(
     except Exception as e:
         print(f"Error refreshing members: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to refresh members: {str(e)}")
+
+@router.get("/api/users/{user_id}/chats")
+async def api_get_user_chats(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get user's chat memberships."""
+    try:
+        memberships = get_user_chat_memberships(db, user_id)
+        return {
+            "status": "success",
+            "memberships": memberships
+        }
+    except Exception as e:
+        print(f"Error getting user chats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user chats: {str(e)}")
+
+@router.post("/api/users/{user_id}/remove-from-chat")
+async def api_remove_user_from_chat(
+    user_id: int,
+    chat_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Remove user from specific chat."""
+    try:
+        user = get_user_by_id(db, user_id)
+        if not user or not user.telegram_id:
+            raise HTTPException(status_code=404, detail="User not found or no Telegram ID")
+        
+        # Remove from database
+        chat_member = db.query(ChatMember).filter(
+            ChatMember.chat_id == chat_id,
+            ChatMember.user_telegram_id == user.telegram_id
+        ).first()
+        
+        if chat_member:
+            chat_member.is_active = 'left'
+            db.commit()
+        
+        # Try to remove from actual Telegram chat
+        if settings.BOT_TOKEN:
+            try:
+                from bot.chat_manager import ChatManager
+                chat_manager = ChatManager(settings.BOT_TOKEN)
+                await chat_manager.remove_user_from_chat(chat_id, user.telegram_id)
+            except Exception as e:
+                print(f"Error removing from Telegram chat: {e}")
+        
+        return {
+            "status": "success",
+            "message": f"User removed from chat {chat_id}"
+        }
+        
+    except Exception as e:
+        print(f"Error removing user from chat: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to remove user from chat: {str(e)}")
 
 @router.post("/api/users/{user_id}/rehire")
 async def api_rehire_user(

@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from database.models import User, Role, Chat, Admin, ChatMember
+from database.models import User, Role, Chat, Admin, ChatMember, role_chats
 from passlib.context import CryptContext
 
 # Password hashing
@@ -98,13 +98,8 @@ def fire_user(db: Session, user_id: int) -> Optional[User]:
         # Mark user as fired
         user.status = 'fired'
         
-        # Remove user from all chats
-        if user.telegram_id:
-            # Get all chats where user is a member
-            user_chats = get_user_chats(db, user.telegram_id)
-            for chat_member in user_chats:
-                # Mark as left in database
-                chat_member.is_active = 'left'
+        # Remove user from all role chats
+        remove_user_from_role_chats(db, user_id)
         
         db.commit()
         db.refresh(user)
@@ -247,6 +242,112 @@ def get_admin_by_username(db: Session, username: str) -> Optional[Admin]:
 def get_admin_by_telegram_id(db: Session, telegram_id: int) -> Optional[Admin]:
     """Get admin by Telegram ID."""
     return db.query(Admin).filter(Admin.telegram_id == telegram_id).first()
+
+def add_user_to_role_chats(db: Session, user_id: int) -> bool:
+    """Add user to all chats associated with their role."""
+    try:
+        user = get_user_by_id(db, user_id)
+        if not user or not user.role_id or not user.telegram_id:
+            return False
+        
+        # Get all chats for this role
+        role_chats = db.query(Chat).join(role_chats).filter(
+            role_chats.c.role_id == user.role_id
+        ).all()
+        
+        # Add user to each chat
+        for chat in role_chats:
+            add_chat_member(db, chat.chat_id, user.telegram_id, 
+                          user.username, user.first_name, user.last_name)
+        
+        return True
+    except Exception as e:
+        print(f"Error adding user to role chats: {e}")
+        return False
+
+def remove_user_from_role_chats(db: Session, user_id: int) -> bool:
+    """Remove user from all chats associated with their role."""
+    try:
+        user = get_user_by_id(db, user_id)
+        if not user or not user.telegram_id:
+            return False
+        
+        # Mark all user's chat memberships as left
+        user_chats = get_user_chats(db, user.telegram_id)
+        for chat_member in user_chats:
+            chat_member.is_active = 'left'
+        
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Error removing user from role chats: {e}")
+        return False
+
+def update_user_role_chats(db: Session, user_id: int, old_role_id: int = None, new_role_id: int = None) -> bool:
+    """Update user's chat memberships when role changes."""
+    try:
+        user = get_user_by_id(db, user_id)
+        if not user or not user.telegram_id:
+            return False
+        
+        # Remove from old role chats
+        if old_role_id:
+            old_chats = db.query(Chat).join(role_chats).filter(
+                role_chats.c.role_id == old_role_id
+            ).all()
+            
+            for chat in old_chats:
+                chat_member = db.query(ChatMember).filter(
+                    ChatMember.chat_id == chat.chat_id,
+                    ChatMember.user_telegram_id == user.telegram_id
+                ).first()
+                
+                if chat_member:
+                    chat_member.is_active = 'left'
+        
+        # Add to new role chats
+        if new_role_id:
+            new_chats = db.query(Chat).join(role_chats).filter(
+                role_chats.c.role_id == new_role_id
+            ).all()
+            
+            for chat in new_chats:
+                add_chat_member(db, chat.chat_id, user.telegram_id, 
+                              user.username, user.first_name, user.last_name)
+        
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Error updating user role chats: {e}")
+        return False
+
+def get_user_chat_memberships(db: Session, user_id: int) -> List[dict]:
+    """Get user's chat memberships with chat details."""
+    try:
+        user = get_user_by_id(db, user_id)
+        if not user or not user.telegram_id:
+            return []
+        
+        # Get user's active chat memberships
+        memberships = db.query(ChatMember, Chat).join(Chat, ChatMember.chat_id == Chat.chat_id).filter(
+            ChatMember.user_telegram_id == user.telegram_id,
+            ChatMember.is_active == 'active'
+        ).all()
+        
+        result = []
+        for membership, chat in memberships:
+            result.append({
+                'chat_id': chat.chat_id,
+                'chat_name': chat.chat_name,
+                'chat_link': chat.chat_link,
+                'joined_at': membership.joined_at,
+                'role_name': user.role.name if user.role else None
+            })
+        
+        return result
+    except Exception as e:
+        print(f"Error getting user chat memberships: {e}")
+        return []
 
 def verify_admin_password(admin: Admin, password: str) -> bool:
     """Verify admin password."""
