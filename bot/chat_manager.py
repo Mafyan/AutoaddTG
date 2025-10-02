@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 from telegram import Bot, Update
 from telegram.error import TelegramError, BadRequest
+from sqlalchemy.orm import Session
 from database.database import SessionLocal
 from database.crud import (
     get_chats_by_role, add_chat_member, remove_chat_member,
