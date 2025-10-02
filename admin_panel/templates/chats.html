@@ -108,9 +108,10 @@
             return;
         }
         
+        const button = document.querySelector('button[onclick="syncChats()"]');
+        const originalText = button.innerHTML;
+        
         try {
-            const button = event.target;
-            const originalText = button.innerHTML;
             button.innerHTML = '<i class="bi bi-hourglass-split"></i> Синхронизация...';
             button.disabled = true;
             

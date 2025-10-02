@@ -269,15 +269,21 @@ async def api_sync_chats(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Sync bot chats with database."""
+    print("DEBUG: Starting chat sync process")
+    
     if not settings.BOT_TOKEN:
+        print("ERROR: Bot token not configured")
         raise HTTPException(status_code=500, detail="Bot token not configured")
     
     try:
+        print("DEBUG: Importing ChatManager")
         from bot.chat_manager import ChatManager
         chat_manager = ChatManager(settings.BOT_TOKEN)
         
+        print("DEBUG: Starting sync process")
         # Sync chats to database
         results = await chat_manager.sync_chats_to_database(db)
+        print(f"DEBUG: Sync completed with results: {results}")
         
         return {
             "status": "success", 
@@ -286,7 +292,9 @@ async def api_sync_chats(
         }
         
     except Exception as e:
-        print(f"Error syncing chats: {e}")
+        print(f"ERROR: Error syncing chats: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to sync chats: {str(e)}")
 
 @router.post("/api/users/{user_id}/rehire")
