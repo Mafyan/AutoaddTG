@@ -72,20 +72,6 @@ def main():
     
     # Start the bot
     logger.info("Starting bot...")
-    
-    # Start automatic member synchronization
-    async def start_auto_sync():
-        try:
-            from bot.chat_manager import ChatManager
-            chat_manager = ChatManager(settings.BOT_TOKEN)
-            await chat_manager.start_auto_sync()
-        except Exception as e:
-            logger.error(f"Failed to start auto sync: {e}")
-    
-    # Run auto sync in background
-    import asyncio
-    asyncio.create_task(start_auto_sync())
-    
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
