@@ -408,6 +408,15 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
             print(f"DEBUG: Bot added to chat {chat.id}")
             await _add_chat_to_database(db, chat)
             
+            # Trigger chat sync to update web panel
+            try:
+                from bot.chat_manager import ChatManager
+                chat_manager = ChatManager(settings.BOT_TOKEN)
+                await chat_manager.sync_chats_to_database()
+                print(f"DEBUG: Synced chats to database after bot addition")
+            except Exception as e:
+                print(f"DEBUG: Error syncing chats: {e}")
+            
         # Bot was removed from chat
         elif old_status == 'member' and new_status in ['left', 'kicked']:
             print(f"DEBUG: Bot removed from chat {chat.id}")
@@ -468,6 +477,15 @@ async def handle_message_in_group(update: Update, context: ContextTypes.DEFAULT_
         if not existing_chat:
             print(f"DEBUG: New group chat detected: {chat.title} (ID: {chat.id})")
             await _add_chat_to_database(db, chat)
+            
+            # Trigger chat sync to update web panel
+            try:
+                from bot.chat_manager import ChatManager
+                chat_manager = ChatManager(settings.BOT_TOKEN)
+                await chat_manager.sync_chats_to_database()
+                print(f"DEBUG: Synced chats to database after new chat detection")
+            except Exception as e:
+                print(f"DEBUG: Error syncing chats: {e}")
             
     except Exception as e:
         logger.error(f"Error in handle_message_in_group: {e}")

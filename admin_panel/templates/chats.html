@@ -37,6 +37,9 @@
             <button class="btn btn-success me-2" onclick="syncChats()">
                 <i class="bi bi-robot"></i> Синхронизировать с ботом
             </button>
+            <button class="btn btn-primary me-2" onclick="forceSyncChats()">
+                <i class="bi bi-arrow-clockwise"></i> Принудительно обновить
+            </button>
                     <button class="btn btn-warning me-2" onclick="syncMembers()">
                         <i class="bi bi-people"></i> Синхронизировать участников
                     </button>
@@ -142,6 +145,40 @@
         } catch (error) {
             console.error('Error syncing chats:', error);
             alert('Ошибка при синхронизации чатов');
+        } finally {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    }
+    
+    async function forceSyncChats() {
+        if (!confirm('Принудительно обновить список чатов? Это может занять некоторое время.')) {
+            return;
+        }
+        
+        const button = document.querySelector('button[onclick="forceSyncChats()"]');
+        const originalText = button.innerHTML;
+        
+        try {
+            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Принудительное обновление...';
+            button.disabled = true;
+            
+            // First sync with bot
+            const syncResponse = await apiRequest('/api/chats/sync', {
+                method: 'POST'
+            });
+            
+            if (syncResponse.ok) {
+                const result = await syncResponse.json();
+                alert(`Принудительное обновление завершено!\n\nНайдено чатов: ${result.results.total_found}\nСоздано: ${result.results.created}\nОбновлено: ${result.results.updated}\nОшибок: ${result.results.errors}`);
+                loadChats(); // Reload the table
+            } else {
+                const error = await syncResponse.json();
+                alert('Ошибка принудительного обновления: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error force syncing chats:', error);
+            alert('Ошибка при принудительном обновлении чатов');
         } finally {
             button.innerHTML = originalText;
             button.disabled = false;

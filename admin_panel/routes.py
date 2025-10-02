@@ -497,6 +497,34 @@ async def api_rehire_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Add user back to role chats
+    if user.telegram_id and user.role_id:
+        try:
+            success = add_user_to_role_chats(db, user_id)
+            print(f"DEBUG: Added user back to role chats: {success}")
+            
+            # Try to add to actual Telegram chats
+            from bot.chat_manager import ChatManager
+            chat_manager = ChatManager(settings.BOT_TOKEN)
+            
+            # Get all chats for this role
+            chats = get_chats_by_role(db, user.role_id)
+            print(f"DEBUG: Found {len(chats)} chats for role {user.role_id}")
+            
+            # Add user to each Telegram chat
+            for chat in chats:
+                if chat.chat_id:  # Only if chat has Telegram ID
+                    try:
+                        success = await chat_manager.add_user_to_chat(chat.chat_id, user.telegram_id)
+                        if success:
+                            print(f"DEBUG: Successfully added user to Telegram chat {chat.chat_id}")
+                        else:
+                            print(f"DEBUG: Failed to add user to Telegram chat {chat.chat_id}")
+                    except Exception as e:
+                        print(f"DEBUG: Error adding user to Telegram chat {chat.chat_id}: {e}")
+        except Exception as e:
+            print(f"DEBUG: Error in chat management: {e}")
+    
     # Send notification to user via Telegram
     if user.telegram_id and settings.BOT_TOKEN:
         try:
