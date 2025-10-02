@@ -315,6 +315,122 @@ class ChatManager:
         
         return results
     
+    async def sync_chat_members(self, chat_id: int, db: Session) -> dict:
+        """
+        Sync chat members with database - collect all members and remove unauthorized ones.
+        
+        Args:
+            chat_id: Telegram chat ID
+            db: Database session
+            
+        Returns:
+            Dictionary with sync results
+        """
+        try:
+            from database.crud import get_user_by_telegram_id, add_chat_member, remove_chat_member
+            
+            # Get all chat members from Telegram
+            chat_members = await self.get_chat_members_from_telegram(chat_id)
+            print(f"DEBUG: Found {len(chat_members)} members in chat {chat_id}")
+            
+            # Get authorized users from database
+            authorized_users = db.query(User).filter(User.status == 'approved').all()
+            authorized_telegram_ids = {user.telegram_id for user in authorized_users if user.telegram_id}
+            
+            results = {
+                'total_members': len(chat_members),
+                'authorized_members': 0,
+                'removed_unauthorized': 0,
+                'errors': 0
+            }
+            
+            for member in chat_members:
+                try:
+                    user_telegram_id = member['id']
+                    
+                    # Check if user is authorized
+                    if user_telegram_id in authorized_telegram_ids:
+                        # User is authorized - add/update in database
+                        add_chat_member(db, chat_id, user_telegram_id, 
+                                      member.get('username'), member.get('first_name'), member.get('last_name'))
+                        results['authorized_members'] += 1
+                        print(f"DEBUG: Authorized user {user_telegram_id} in chat {chat_id}")
+                    else:
+                        # User is not authorized - remove from chat
+                        try:
+                            await self.remove_user_from_chat(chat_id, user_telegram_id)
+                            results['removed_unauthorized'] += 1
+                            print(f"DEBUG: Removed unauthorized user {user_telegram_id} from chat {chat_id}")
+                        except Exception as e:
+                            print(f"DEBUG: Could not remove user {user_telegram_id}: {e}")
+                            results['errors'] += 1
+                            
+                except Exception as e:
+                    print(f"DEBUG: Error processing member {member}: {e}")
+                    results['errors'] += 1
+            
+            db.commit()
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to sync chat members: {e}")
+            return {'error': str(e)}
+    
+    async def get_chat_members_from_telegram(self, chat_id: int) -> List[dict]:
+        """
+        Get all members from a Telegram chat.
+        
+        Args:
+            chat_id: Telegram chat ID
+            
+        Returns:
+            List of member information dictionaries
+        """
+        try:
+            # Get chat administrators first
+            administrators = await self.bot.get_chat_administrators(chat_id)
+            members = []
+            
+            for admin in administrators:
+                member_info = {
+                    'id': admin.user.id,
+                    'username': admin.user.username,
+                    'first_name': admin.user.first_name,
+                    'last_name': admin.user.last_name,
+                    'is_admin': True
+                }
+                members.append(member_info)
+            
+            # Try to get all members (this might not work for large groups)
+            try:
+                # This is a workaround - we'll get members from recent messages
+                updates = await self.bot.get_updates(limit=100)
+                for update in updates:
+                    if (update.message and 
+                        update.message.chat and 
+                        update.message.chat.id == chat_id and 
+                        update.message.from_user):
+                        
+                        user = update.message.from_user
+                        # Check if we already have this user
+                        if not any(m['id'] == user.id for m in members):
+                            member_info = {
+                                'id': user.id,
+                                'username': user.username,
+                                'first_name': user.first_name,
+                                'last_name': user.last_name,
+                                'is_admin': False
+                            }
+                            members.append(member_info)
+            except Exception as e:
+                print(f"DEBUG: Could not get all members from messages: {e}")
+            
+            return members
+            
+        except Exception as e:
+            logger.error(f"Failed to get chat members from Telegram: {e}")
+            return []
+    
     async def add_user_to_chat(self, chat_id: int, user_telegram_id: int) -> bool:
         """
         Add user to specific chat.

@@ -474,3 +474,52 @@ async def handle_message_in_group(update: Update, context: ContextTypes.DEFAULT_
     finally:
         db.close()
 
+async def sync_members_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /syncmembers command for admins."""
+    user = update.effective_user
+    db = SessionLocal()
+    
+    try:
+        # Check if user is admin
+        admin = get_admin_by_telegram_id(db, user.id)
+        if not admin:
+            await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
+            return
+        
+        # Get chat ID from command arguments or current chat
+        chat_id = None
+        if context.args:
+            try:
+                chat_id = int(context.args[0])
+            except ValueError:
+                await update.message.reply_text("❌ Неверный формат Chat ID. Используйте: /syncmembers <chat_id>")
+                return
+        else:
+            # Use current chat if it's a group
+            if update.effective_chat.type in ['group', 'supergroup']:
+                chat_id = update.effective_chat.id
+            else:
+                await update.message.reply_text("❌ Укажите Chat ID: /syncmembers <chat_id>")
+                return
+        
+        await update.message.reply_text(f"🔄 Синхронизирую участников чата {chat_id}...")
+        
+        # Sync chat members
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        results = await chat_manager.sync_chat_members(chat_id, db)
+        
+        message = f"✅ **Синхронизация участников завершена!**\n\n"
+        message += f"📊 **Результаты для чата {chat_id}:**\n"
+        message += f"• Всего участников: {results['total_members']}\n"
+        message += f"• Авторизованных: {results['authorized_members']}\n"
+        message += f"• Удалено неавторизованных: {results['removed_unauthorized']}\n"
+        message += f"• Ошибок: {results['errors']}\n"
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+            
+    except Exception as e:
+        logger.error(f"Error in sync_members_command: {e}")
+        await update.message.reply_text("❌ Ошибка при синхронизации участников.")
+    finally:
+        db.close()
+
