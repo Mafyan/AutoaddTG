@@ -18,7 +18,9 @@ from bot.handlers import (
     handle_text_phone,
     error_handler,
     list_chats_command,
-    sync_chats_command
+    sync_chats_command,
+    handle_my_chat_member,
+    handle_message_in_group
 )
 
 # Configure logging
@@ -49,6 +51,12 @@ def main():
     # Add message handlers
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_phone))
+    
+    # Add group message handler for auto-detecting chats
+    application.add_handler(MessageHandler(filters.ChatType.GROUPS, handle_message_in_group))
+    
+    # Add my_chat_member handler for bot add/remove events
+    application.add_handler(MessageHandler(filters.StatusUpdate.MY_CHAT_MEMBER, handle_my_chat_member))
     
     # Add error handler
     application.add_error_handler(error_handler)

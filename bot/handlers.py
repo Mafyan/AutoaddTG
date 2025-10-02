@@ -9,7 +9,10 @@ from database.crud import (
     create_user,
     get_chats_by_role,
     add_chat_member,
-    get_admin_by_telegram_id
+    get_admin_by_telegram_id,
+    create_chat,
+    get_chat_by_chat_id,
+    update_chat
 )
 from bot.chat_manager import ChatManager
 from config import settings
@@ -380,6 +383,94 @@ async def sync_chats_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"Error in sync_chats_command: {e}")
         await update.message.reply_text("❌ Ошибка при синхронизации чатов.")
+    finally:
+        db.close()
+
+async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle bot being added to or removed from chats."""
+    db = SessionLocal()
+    
+    try:
+        my_chat_member = update.my_chat_member
+        chat = my_chat_member.chat
+        old_status = my_chat_member.old_chat_member.status
+        new_status = my_chat_member.new_chat_member.status
+        
+        print(f"DEBUG: Bot status changed in chat {chat.id} ({chat.title})")
+        print(f"DEBUG: From {old_status} to {new_status}")
+        
+        # Only process group chats
+        if chat.type not in ['group', 'supergroup']:
+            return
+        
+        # Bot was added to chat
+        if old_status in ['left', 'kicked'] and new_status == 'member':
+            print(f"DEBUG: Bot added to chat {chat.id}")
+            await _add_chat_to_database(db, chat)
+            
+        # Bot was removed from chat
+        elif old_status == 'member' and new_status in ['left', 'kicked']:
+            print(f"DEBUG: Bot removed from chat {chat.id}")
+            # You can add logic here to mark chat as inactive if needed
+            
+    except Exception as e:
+        logger.error(f"Error in handle_my_chat_member: {e}")
+    finally:
+        db.close()
+
+async def _add_chat_to_database(db: SessionLocal, chat):
+    """Add chat to database when bot is added."""
+    try:
+        # Check if chat already exists
+        existing_chat = get_chat_by_chat_id(db, chat.id)
+        
+        if existing_chat:
+            # Update existing chat
+            update_chat(db, existing_chat.id, 
+                       chat_name=chat.title,
+                       chat_link=None)  # Will be updated later
+            print(f"DEBUG: Updated existing chat {chat.title}")
+        else:
+            # Create new chat
+            chat_obj = create_chat(db, 
+                                 chat_name=chat.title,
+                                 chat_link=None,
+                                 chat_id=chat.id,
+                                 description=f"Auto-added {chat.type} chat")
+            print(f"DEBUG: Created new chat {chat.title} with ID {chat_obj.id}")
+            
+            # Try to get invite link
+            try:
+                from telegram import Bot
+                bot = Bot(token=settings.BOT_TOKEN)
+                invite_link = await bot.export_chat_invite_link(chat.id)
+                update_chat(db, chat_obj.id, chat_link=invite_link)
+                print(f"DEBUG: Got invite link for {chat.title}")
+            except Exception as e:
+                print(f"DEBUG: Could not get invite link for {chat.title}: {e}")
+                
+    except Exception as e:
+        logger.error(f"Error adding chat to database: {e}")
+
+async def handle_message_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle messages in groups to track chat activity."""
+    db = SessionLocal()
+    
+    try:
+        chat = update.effective_chat
+        
+        # Only process group chats
+        if chat.type not in ['group', 'supergroup']:
+            return
+            
+        # Check if this is a new chat for us
+        existing_chat = get_chat_by_chat_id(db, chat.id)
+        if not existing_chat:
+            print(f"DEBUG: New group chat detected: {chat.title} (ID: {chat.id})")
+            await _add_chat_to_database(db, chat)
+            
+    except Exception as e:
+        logger.error(f"Error in handle_message_in_group: {e}")
     finally:
         db.close()
 
