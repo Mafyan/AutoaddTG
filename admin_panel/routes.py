@@ -327,6 +327,81 @@ async def api_sync_chats(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to sync chats: {str(e)}")
 
+@router.post("/api/chats/sync-members")
+async def api_sync_chat_members(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Sync members for all chats."""
+    if not settings.BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    try:
+        from bot.chat_manager import ChatManager
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        # Sync all chat members
+        await chat_manager.sync_all_chat_members()
+        
+        return {
+            "status": "success", 
+            "message": "Chat members synced successfully"
+        }
+        
+    except Exception as e:
+        print(f"Error syncing chat members: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync chat members: {str(e)}")
+
+@router.post("/api/chats/start-auto-sync")
+async def api_start_auto_sync(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Start automatic member synchronization."""
+    if not settings.BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    try:
+        from bot.chat_manager import ChatManager
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        # Start auto sync
+        await chat_manager.start_auto_sync()
+        
+        return {
+            "status": "success", 
+            "message": "Automatic synchronization started"
+        }
+        
+    except Exception as e:
+        print(f"Error starting auto sync: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start auto sync: {str(e)}")
+
+@router.post("/api/chats/stop-auto-sync")
+async def api_stop_auto_sync(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Stop automatic member synchronization."""
+    if not settings.BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    try:
+        from bot.chat_manager import ChatManager
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        # Stop auto sync
+        await chat_manager.stop_auto_sync()
+        
+        return {
+            "status": "success", 
+            "message": "Automatic synchronization stopped"
+        }
+        
+    except Exception as e:
+        print(f"Error stopping auto sync: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop auto sync: {str(e)}")
+
 @router.post("/api/users/{user_id}/rehire")
 async def api_rehire_user(
     user_id: int,

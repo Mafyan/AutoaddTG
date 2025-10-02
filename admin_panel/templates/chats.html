@@ -37,6 +37,15 @@
             <button class="btn btn-success me-2" onclick="syncChats()">
                 <i class="bi bi-robot"></i> Синхронизировать с ботом
             </button>
+            <button class="btn btn-warning me-2" onclick="syncMembers()">
+                <i class="bi bi-people"></i> Синхронизировать участников
+            </button>
+            <button class="btn btn-info me-2" onclick="startAutoSync()">
+                <i class="bi bi-play-circle"></i> Запустить автосинхронизацию
+            </button>
+            <button class="btn btn-danger me-2" onclick="stopAutoSync()">
+                <i class="bi bi-stop-circle"></i> Остановить автосинхронизацию
+            </button>
             <button class="btn btn-primary me-2" onclick="openCreateModal()">
                 <i class="bi bi-plus-lg"></i> Добавить чат
             </button>
@@ -130,6 +139,99 @@
         } catch (error) {
             console.error('Error syncing chats:', error);
             alert('Ошибка при синхронизации чатов');
+        } finally {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    }
+    
+    async function syncMembers() {
+        if (!confirm('Синхронизировать участников всех чатов? Это удалит неавторизованных пользователей.')) {
+            return;
+        }
+        
+        const button = document.querySelector('button[onclick="syncMembers()"]');
+        const originalText = button.innerHTML;
+        
+        try {
+            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Синхронизация...';
+            button.disabled = true;
+            
+            const response = await apiRequest('/api/chats/sync-members', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                alert('Синхронизация участников завершена!');
+            } else {
+                const error = await response.json();
+                alert('Ошибка синхронизации: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error syncing members:', error);
+            alert('Ошибка при синхронизации участников');
+        } finally {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    }
+    
+    async function startAutoSync() {
+        if (!confirm('Запустить автоматическую синхронизацию участников каждый час?')) {
+            return;
+        }
+        
+        const button = document.querySelector('button[onclick="startAutoSync()"]');
+        const originalText = button.innerHTML;
+        
+        try {
+            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Запуск...';
+            button.disabled = true;
+            
+            const response = await apiRequest('/api/chats/start-auto-sync', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                alert('Автоматическая синхронизация запущена!');
+            } else {
+                const error = await response.json();
+                alert('Ошибка запуска: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error starting auto sync:', error);
+            alert('Ошибка при запуске автосинхронизации');
+        } finally {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    }
+    
+    async function stopAutoSync() {
+        if (!confirm('Остановить автоматическую синхронизацию?')) {
+            return;
+        }
+        
+        const button = document.querySelector('button[onclick="stopAutoSync()"]');
+        const originalText = button.innerHTML;
+        
+        try {
+            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Остановка...';
+            button.disabled = true;
+            
+            const response = await apiRequest('/api/chats/stop-auto-sync', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                alert('Автоматическая синхронизация остановлена!');
+            } else {
+                const error = await response.json();
+                alert('Ошибка остановки: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error stopping auto sync:', error);
+            alert('Ошибка при остановке автосинхронизации');
         } finally {
             button.innerHTML = originalText;
             button.disabled = false;

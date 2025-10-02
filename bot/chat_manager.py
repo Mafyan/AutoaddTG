@@ -1,5 +1,6 @@
 """Chat management utilities for Telegram bot."""
 import logging
+import asyncio
 from typing import List, Optional
 from telegram import Bot, Update
 from telegram.error import TelegramError, BadRequest
@@ -7,9 +8,9 @@ from sqlalchemy.orm import Session
 from database.database import SessionLocal
 from database.crud import (
     get_chats_by_role, add_chat_member, remove_chat_member,
-    get_user_chats, fire_user, get_user_by_telegram_id
+    get_user_chats, fire_user, get_user_by_telegram_id, get_chats
 )
-from database.models import Chat
+from database.models import Chat, User
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,8 @@ class ChatManager:
     
     def __init__(self, bot_token: str):
         self.bot = Bot(token=bot_token)
+        self._sync_task = None
+        self._running = False
     
     async def join_chat_by_link(self, chat_link: str) -> Optional[dict]:
         """
@@ -430,6 +433,76 @@ class ChatManager:
         except Exception as e:
             logger.error(f"Failed to get chat members from Telegram: {e}")
             return []
+    
+    async def start_auto_sync(self):
+        """Start automatic member synchronization every hour."""
+        if self._running:
+            return
+        
+        self._running = True
+        self._sync_task = asyncio.create_task(self._auto_sync_loop())
+        logger.info("Started automatic member synchronization")
+    
+    async def stop_auto_sync(self):
+        """Stop automatic member synchronization."""
+        self._running = False
+        if self._sync_task:
+            self._sync_task.cancel()
+            try:
+                await self._sync_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Stopped automatic member synchronization")
+    
+    async def _auto_sync_loop(self):
+        """Background task for automatic member synchronization."""
+        while self._running:
+            try:
+                await self.sync_all_chat_members()
+                # Wait 1 hour (3600 seconds)
+                await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in auto sync loop: {e}")
+                # Wait 5 minutes before retrying
+                await asyncio.sleep(300)
+    
+    async def sync_all_chat_members(self):
+        """Sync members for all chats in database."""
+        db = SessionLocal()
+        try:
+            # Get all chats with Telegram IDs
+            chats = get_chats(db)
+            telegram_chats = [chat for chat in chats if chat.chat_id]
+            
+            logger.info(f"Starting auto-sync for {len(telegram_chats)} chats")
+            
+            total_results = {
+                'total_members': 0,
+                'authorized_members': 0,
+                'removed_unauthorized': 0,
+                'errors': 0
+            }
+            
+            for chat in telegram_chats:
+                try:
+                    results = await self.sync_chat_members(chat.chat_id, db)
+                    if 'error' not in results:
+                        total_results['total_members'] += results['total_members']
+                        total_results['authorized_members'] += results['authorized_members']
+                        total_results['removed_unauthorized'] += results['removed_unauthorized']
+                        total_results['errors'] += results['errors']
+                except Exception as e:
+                    logger.error(f"Error syncing chat {chat.chat_id}: {e}")
+                    total_results['errors'] += 1
+            
+            logger.info(f"Auto-sync completed: {total_results}")
+            
+        except Exception as e:
+            logger.error(f"Error in sync_all_chat_members: {e}")
+        finally:
+            db.close()
     
     async def add_user_to_chat(self, chat_id: int, user_telegram_id: int) -> bool:
         """
