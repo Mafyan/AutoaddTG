@@ -185,23 +185,32 @@
             const formData = new FormData();
             formData.append('role_id', roleId);
             
+            console.log('Sending approval request:', { userId, roleId });
+            
             const response = await apiRequest(`/api/requests/${userId}/approve`, {
                 method: 'POST',
                 headers: {},
                 body: formData
             });
             
+            console.log('Response status:', response.status);
+            
             if (response.ok) {
                 approveModal.hide();
                 loadRequests();
                 alert('Заявка одобрена!');
             } else {
-                const errorData = await response.json();
-                alert('Ошибка: ' + (errorData.detail || 'Неизвестная ошибка'));
+                try {
+                    const errorData = await response.json();
+                    alert('Ошибка: ' + (errorData.detail || 'Неизвестная ошибка'));
+                } catch (e) {
+                    alert('Ошибка: ' + response.status + ' - ' + response.statusText);
+                }
             }
         } catch (error) {
             console.error('Error approving user:', error);
-            alert('Ошибка при одобрении заявки: ' + error.message);
+            const errorMessage = error.message || error.toString() || 'Неизвестная ошибка';
+            alert('Ошибка при одобрении заявки: ' + errorMessage);
         } finally {
             // Разблокируем кнопку
             approveButton.disabled = false;
