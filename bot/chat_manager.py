@@ -315,6 +315,26 @@ class ChatManager:
         
         return results
     
+    async def add_user_to_chat(self, chat_id: int, user_telegram_id: int) -> bool:
+        """
+        Add user to specific chat.
+        
+        Args:
+            chat_id: Telegram chat ID
+            user_telegram_id: User's Telegram ID
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Try to add user to chat
+            await self.bot.unban_chat_member(chat_id, user_telegram_id)
+            logger.info(f"Successfully added user {user_telegram_id} to chat {chat_id}")
+            return True
+        except TelegramError as e:
+            logger.error(f"Failed to add user {user_telegram_id} to chat {chat_id}: {e}")
+            return False
+    
     async def get_bot_chats(self) -> List[dict]:
         """
         Get all chats where bot is a member.

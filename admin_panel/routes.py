@@ -157,6 +157,36 @@ async def api_approve_request(
     
     print(f"DEBUG: User {user_id} approved successfully")
     
+    # Add user to all chats for this role
+    if user.telegram_id:
+        try:
+            from bot.chat_manager import ChatManager
+            chat_manager = ChatManager(settings.BOT_TOKEN)
+            
+            # Get all chats for this role
+            chats = get_chats_by_role(db, role_id)
+            print(f"DEBUG: Found {len(chats)} chats for role {role_id}")
+            
+            # Add user to each chat
+            for chat in chats:
+                if chat.chat_id:  # Only if chat has Telegram ID
+                    try:
+                        # Add to database
+                        add_chat_member(db, chat.chat_id, user.telegram_id, 
+                                      user.username, user.first_name, user.last_name)
+                        print(f"DEBUG: Added user {user.telegram_id} to chat {chat.chat_id}")
+                        
+                        # Try to add to actual Telegram chat
+                        success = await chat_manager.add_user_to_chat(chat.chat_id, user.telegram_id)
+                        if success:
+                            print(f"DEBUG: Successfully added user to Telegram chat {chat.chat_id}")
+                        else:
+                            print(f"DEBUG: Failed to add user to Telegram chat {chat.chat_id}")
+                    except Exception as e:
+                        print(f"DEBUG: Error adding user to chat {chat.chat_id}: {e}")
+        except Exception as e:
+            print(f"DEBUG: Error in chat management: {e}")
+    
     # Send notification to user via Telegram
     if user.telegram_id and settings.BOT_TOKEN:
         try:
