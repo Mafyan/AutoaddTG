@@ -62,11 +62,17 @@
 {% block extra_js %}
 <script>
     async function loadStats() {
+        const statsContainer = document.getElementById('statsContainer');
+        
         try {
             const response = await apiRequest('/api/stats');
+            
+            if (!response.ok) {
+                throw new Error('Failed to load statistics');
+            }
+            
             const data = await response.json();
             
-            const statsContainer = document.getElementById('statsContainer');
             statsContainer.innerHTML = `
                 <div class="col-md-3">
                     <div class="stat-card">
@@ -134,15 +140,32 @@
             `;
         } catch (error) {
             console.error('Error loading stats:', error);
+            showToast('Ошибка при загрузке статистики', 'error');
+            statsContainer.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        Не удалось загрузить статистику. Пожалуйста, попробуйте снова.
+                        <button class="btn btn-sm btn-outline-danger ms-3" onclick="loadStats()">
+                            <i class="bi bi-arrow-clockwise"></i> Повторить
+                        </button>
+                    </div>
+                </div>
+            `;
         }
     }
     
     async function loadRecentRequests() {
+        const container = document.getElementById('recentRequests');
+        
         try {
             const response = await apiRequest('/api/users?status=pending');
-            const users = await response.json();
             
-            const container = document.getElementById('recentRequests');
+            if (!response.ok) {
+                throw new Error('Failed to load requests');
+            }
+            
+            const users = await response.json();
             
             if (users.length === 0) {
                 container.innerHTML = '<p class="text-muted text-center py-4">Нет новых заявок</p>';
@@ -183,6 +206,12 @@
             container.innerHTML = tableHtml;
         } catch (error) {
             console.error('Error loading recent requests:', error);
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Не удалось загрузить заявки.
+                </div>
+            `;
         }
     }
     

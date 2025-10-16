@@ -178,8 +178,7 @@
         }
         
         // Блокируем кнопку во время обработки
-        approveButton.disabled = true;
-        approveButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Обработка...';
+        setButtonLoading(approveButton, true);
         
         try {
             const requestData = {
@@ -203,23 +202,24 @@
             if (response.ok) {
                 approveModal.hide();
                 loadRequests();
-                alert('Заявка одобрена!');
+                showToast('Заявка успешно одобрена!', 'success');
             } else {
+                let errorMessage = 'Неизвестная ошибка';
                 try {
                     const errorData = await response.json();
-                    alert('Ошибка: ' + (errorData.detail || 'Неизвестная ошибка'));
+                    errorMessage = errorData.detail || errorMessage;
                 } catch (e) {
-                    alert('Ошибка: ' + response.status + ' - ' + response.statusText);
+                    errorMessage = `${response.status} - ${response.statusText}`;
                 }
+                showToast('Ошибка: ' + errorMessage, 'error');
             }
         } catch (error) {
             console.error('Error approving user:', error);
             const errorMessage = error.message || error.toString() || 'Неизвестная ошибка';
-            alert('Ошибка при одобрении заявки: ' + errorMessage);
+            showToast('Ошибка при одобрении заявки: ' + errorMessage, 'error');
         } finally {
-            // Разблокируем кнопку
-            approveButton.disabled = false;
-            approveButton.innerHTML = '<i class="bi bi-check-lg"></i> Одобрить';
+            // Разблокируем кнопку ВСЕГДА
+            setButtonLoading(approveButton, false, '<i class="bi bi-check-lg"></i> Одобрить');
         }
     }
     
@@ -235,11 +235,13 @@
             
             if (response.ok) {
                 loadRequests();
-                alert('Заявка отклонена');
+                showToast('Заявка отклонена', 'info');
+            } else {
+                showToast('Ошибка при отклонении заявки', 'error');
             }
         } catch (error) {
             console.error('Error rejecting user:', error);
-            alert('Ошибка при отклонении заявки');
+            showToast('Ошибка при отклонении заявки', 'error');
         }
     }
     

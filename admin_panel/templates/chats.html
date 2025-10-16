@@ -31,32 +31,41 @@
 </div>
 
 <div class="main-content">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2 fw-bold">Чаты</h1>
-        <div>
-            <button class="btn btn-success me-2" onclick="syncChats()">
-                <i class="bi bi-robot"></i> Синхронизировать с ботом
-            </button>
-            <button class="btn btn-primary me-2" onclick="forceSyncChats()">
-                <i class="bi bi-arrow-clockwise"></i> Принудительно обновить
-            </button>
-                    <button class="btn btn-warning me-2" onclick="syncMembers()">
-                        <i class="bi bi-people"></i> Синхронизировать участников
-                    </button>
-                    <button class="btn btn-secondary me-2" onclick="forceRefreshMembers()">
-                        <i class="bi bi-arrow-clockwise"></i> Принудительно обновить участников
-                    </button>
-            <button class="btn btn-info me-2" onclick="startAutoSync()">
-                <i class="bi bi-play-circle"></i> Запустить автосинхронизацию
-            </button>
-            <button class="btn btn-danger me-2" onclick="stopAutoSync()">
-                <i class="bi bi-stop-circle"></i> Остановить автосинхронизацию
-            </button>
-            <button class="btn btn-primary me-2" onclick="openCreateModal()">
-                <i class="bi bi-plus-lg"></i> Добавить чат
-            </button>
-            <button class="btn btn-outline-secondary" onclick="loadChats()">
-                <i class="bi bi-arrow-clockwise"></i> Обновить
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h2 fw-bold mb-0">Чаты</h1>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" onclick="openCreateModal()">
+                    <i class="bi bi-plus-lg"></i> Добавить чат
+                </button>
+                <button class="btn btn-outline-secondary" onclick="loadChats()">
+                    <i class="bi bi-arrow-clockwise"></i> Обновить
+                </button>
+            </div>
+        </div>
+        
+        <!-- Actions Row -->
+        <div class="d-flex flex-wrap gap-2">
+            <div class="btn-group" role="group">
+                <button class="btn btn-success" onclick="syncChats()">
+                    <i class="bi bi-robot"></i> Синхронизировать чаты
+                </button>
+                <button class="btn btn-warning" onclick="syncMembers()">
+                    <i class="bi bi-people"></i> Синхронизировать участников
+                </button>
+            </div>
+            
+            <div class="btn-group" role="group">
+                <button class="btn btn-info" onclick="startAutoSync()">
+                    <i class="bi bi-play-circle"></i> Запустить авто-синхронизацию
+                </button>
+                <button class="btn btn-danger" onclick="stopAutoSync()">
+                    <i class="bi bi-stop-circle"></i> Остановить авто-синхронизацию
+                </button>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="forceRefreshMembers()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить участников чата
             </button>
         </div>
     </div>
@@ -124,11 +133,9 @@
         }
         
         const button = document.querySelector('button[onclick="syncChats()"]');
-        const originalText = button.innerHTML;
+        setButtonLoading(button, true);
         
         try {
-            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Синхронизация...';
-            button.disabled = true;
             
             const response = await apiRequest('/api/chats/sync', {
                 method: 'POST'
@@ -136,52 +143,17 @@
             
             if (response.ok) {
                 const result = await response.json();
-                alert(`Синхронизация завершена!\n\nНайдено чатов: ${result.results.total_found}\nСоздано: ${result.results.created}\nОбновлено: ${result.results.updated}\nОшибок: ${result.results.errors}`);
+                showToast(`Синхронизация завершена! Найдено: ${result.results.total_found}, Создано: ${result.results.created}, Обновлено: ${result.results.updated}`, 'success');
                 loadChats(); // Reload the table
             } else {
                 const error = await response.json();
-                alert('Ошибка синхронизации: ' + error.detail);
+                showToast('Ошибка синхронизации: ' + error.detail, 'error');
             }
         } catch (error) {
             console.error('Error syncing chats:', error);
-            alert('Ошибка при синхронизации чатов');
+            showToast('Ошибка при синхронизации чатов', 'error');
         } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-    }
-    
-    async function forceSyncChats() {
-        if (!confirm('Принудительно обновить список чатов? Это может занять некоторое время.')) {
-            return;
-        }
-        
-        const button = document.querySelector('button[onclick="forceSyncChats()"]');
-        const originalText = button.innerHTML;
-        
-        try {
-            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Принудительное обновление...';
-            button.disabled = true;
-            
-            // First sync with bot
-            const syncResponse = await apiRequest('/api/chats/sync', {
-                method: 'POST'
-            });
-            
-            if (syncResponse.ok) {
-                const result = await syncResponse.json();
-                alert(`Принудительное обновление завершено!\n\nНайдено чатов: ${result.results.total_found}\nСоздано: ${result.results.created}\nОбновлено: ${result.results.updated}\nОшибок: ${result.results.errors}`);
-                loadChats(); // Reload the table
-            } else {
-                const error = await syncResponse.json();
-                alert('Ошибка принудительного обновления: ' + error.detail);
-            }
-        } catch (error) {
-            console.error('Error force syncing chats:', error);
-            alert('Ошибка при принудительном обновлении чатов');
-        } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
+            setButtonLoading(button, false);
         }
     }
     
@@ -191,28 +163,24 @@
         }
         
         const button = document.querySelector('button[onclick="syncMembers()"]');
-        const originalText = button.innerHTML;
+        setButtonLoading(button, true);
         
         try {
-            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Синхронизация...';
-            button.disabled = true;
-            
             const response = await apiRequest('/api/chats/sync-members', {
                 method: 'POST'
             });
             
             if (response.ok) {
-                alert('Синхронизация участников завершена!');
+                showToast('Синхронизация участников завершена!', 'success');
             } else {
                 const error = await response.json();
-                alert('Ошибка синхронизации: ' + error.detail);
+                showToast('Ошибка синхронизации: ' + error.detail, 'error');
             }
         } catch (error) {
             console.error('Error syncing members:', error);
-            alert('Ошибка при синхронизации участников');
+            showToast('Ошибка при синхронизации участников', 'error');
         } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
+            setButtonLoading(button, false);
         }
     }
     
@@ -222,28 +190,24 @@
         }
         
         const button = document.querySelector('button[onclick="startAutoSync()"]');
-        const originalText = button.innerHTML;
+        setButtonLoading(button, true);
         
         try {
-            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Запуск...';
-            button.disabled = true;
-            
             const response = await apiRequest('/api/chats/start-auto-sync', {
                 method: 'POST'
             });
             
             if (response.ok) {
-                alert('Автоматическая синхронизация запущена!');
+                showToast('Автоматическая синхронизация запущена!', 'success');
             } else {
                 const error = await response.json();
-                alert('Ошибка запуска: ' + error.detail);
+                showToast('Ошибка запуска: ' + error.detail, 'error');
             }
         } catch (error) {
             console.error('Error starting auto sync:', error);
-            alert('Ошибка при запуске автосинхронизации');
+            showToast('Ошибка при запуске автосинхронизации', 'error');
         } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
+            setButtonLoading(button, false);
         }
     }
     
@@ -253,28 +217,24 @@
         }
         
         const button = document.querySelector('button[onclick="stopAutoSync()"]');
-        const originalText = button.innerHTML;
+        setButtonLoading(button, true);
         
         try {
-            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Остановка...';
-            button.disabled = true;
-            
             const response = await apiRequest('/api/chats/stop-auto-sync', {
                 method: 'POST'
             });
             
             if (response.ok) {
-                alert('Автоматическая синхронизация остановлена!');
+                showToast('Автоматическая синхронизация остановлена!', 'info');
             } else {
                 const error = await response.json();
-                alert('Ошибка остановки: ' + error.detail);
+                showToast('Ошибка остановки: ' + error.detail, 'error');
             }
         } catch (error) {
             console.error('Error stopping auto sync:', error);
-            alert('Ошибка при остановке автосинхронизации');
+            showToast('Ошибка при остановке автосинхронизации', 'error');
         } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
+            setButtonLoading(button, false);
         }
     }
     
@@ -286,48 +246,38 @@
         }
         
         const button = document.querySelector('button[onclick="forceRefreshMembers()"]');
-        const originalText = button.innerHTML;
+        setButtonLoading(button, true);
         
         try {
-            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Обновление...';
-            button.disabled = true;
-            
             const response = await apiRequest(`/api/chats/force-refresh-members?chat_id=${chatId}`, {
                 method: 'POST'
             });
             
             if (response.ok) {
                 const result = await response.json();
-                alert(`Найдено ${result.members.length} участников в чате ${chatId}`);
+                showToast(`Найдено ${result.members.length} участников в чате ${chatId}`, 'success');
                 
-                // Show members list
-                let membersList = 'Участники чата:\n\n';
-                result.members.forEach((member, index) => {
-                    membersList += `${index + 1}. ${member.first_name || 'Unknown'}\n`;
-                    membersList += `   ID: ${member.id}\n`;
-                    if (member.username) {
-                        membersList += `   Username: @${member.username}\n`;
-                    }
-                    membersList += `   Admin: ${member.is_admin ? 'Да' : 'Нет'}\n\n`;
-                });
+                // Show members list in console
+                console.log('Участники чата:', result.members);
                 
-                if (membersList.length > 1000) {
-                    // Show in console if too long
-                    console.log(membersList);
-                    alert(`Найдено ${result.members.length} участников. Подробности в консоли браузера.`);
-                } else {
-                    alert(membersList);
+                // Show summary in toast
+                if (result.members.length > 0) {
+                    console.table(result.members.map(m => ({
+                        ID: m.id,
+                        Имя: m.first_name,
+                        Username: m.username ? '@' + m.username : '-',
+                        Admin: m.is_admin ? 'Да' : 'Нет'
+                    })));
                 }
             } else {
                 const error = await response.json();
-                alert('Ошибка обновления: ' + error.detail);
+                showToast('Ошибка обновления: ' + error.detail, 'error');
             }
         } catch (error) {
             console.error('Error refreshing members:', error);
-            alert('Ошибка при обновлении участников');
+            showToast('Ошибка при обновлении участников', 'error');
         } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
+            setButtonLoading(button, false);
         }
     }
     
