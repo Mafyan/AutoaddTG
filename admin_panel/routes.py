@@ -248,9 +248,20 @@ async def api_fire_user(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Fire user and remove from all chats."""
-    user = fire_user(db, user_id)
+    # ✅ FIX: Get user and active chats BEFORE firing
+    user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get active chats BEFORE marking them as 'left'
+    active_chat_ids = []
+    if user.telegram_id:
+        user_chats = get_user_chats(db, user.telegram_id)
+        active_chat_ids = [chat.chat_id for chat in user_chats if chat.is_active == 'active']
+        print(f"DEBUG: Found {len(active_chat_ids)} active chats BEFORE firing")
+    
+    # Now fire the user (this will mark chats as 'left' in DB)
+    user = fire_user(db, user_id)
     
     # Remove user from all Telegram chats
     if user.telegram_id and settings.BOT_TOKEN:
@@ -260,17 +271,10 @@ async def api_fire_user(
             from bot.chat_manager import ChatManager
             chat_manager = ChatManager(settings.BOT_TOKEN)
             
-            # Get all chats where user is a member
-            user_chats = get_user_chats(db, user.telegram_id)
-            print(f"DEBUG: Found {len(user_chats)} chat memberships for user")
-            
-            chat_ids = [chat.chat_id for chat in user_chats if chat.is_active == 'active']
-            print(f"DEBUG: Active chat IDs: {chat_ids}")
-            
-            if chat_ids:
+            if active_chat_ids:
                 # Remove user from all chats
-                print(f"DEBUG: Attempting to remove user from {len(chat_ids)} chats")
-                removal_results = await chat_manager.remove_user_from_all_chats(user.telegram_id, chat_ids)
+                print(f"DEBUG: Attempting to remove user from {len(active_chat_ids)} chats: {active_chat_ids}")
+                removal_results = await chat_manager.remove_user_from_all_chats(user.telegram_id, active_chat_ids)
                 print(f"DEBUG: Removal results: {removal_results}")
             else:
                 print("DEBUG: No active chats found for user")
@@ -606,9 +610,45 @@ async def api_delete_user(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
-    """Delete user."""
+    """Delete user completely (including from Telegram chats)."""
+    # ✅ Get user and active chats BEFORE deleting
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get active chats BEFORE deletion
+    active_chat_ids = []
+    if user.telegram_id:
+        user_chats = get_user_chats(db, user.telegram_id)
+        active_chat_ids = [chat.chat_id for chat in user_chats if chat.is_active == 'active']
+        print(f"DEBUG: Found {len(active_chat_ids)} active chats for deletion")
+    
+    telegram_id = user.telegram_id
+    
+    # Delete user from database
     if delete_user(db, user_id):
-        return {"status": "success", "message": "User deleted"}
+        # Remove from Telegram chats after database deletion
+        if telegram_id and settings.BOT_TOKEN and active_chat_ids:
+            try:
+                from bot.chat_manager import ChatManager
+                chat_manager = ChatManager(settings.BOT_TOKEN)
+                
+                print(f"DEBUG: Removing deleted user {telegram_id} from {len(active_chat_ids)} chats")
+                removal_results = await chat_manager.remove_user_from_all_chats(telegram_id, active_chat_ids)
+                print(f"DEBUG: Removal results: {removal_results}")
+                
+                # Send notification
+                bot = Bot(token=settings.BOT_TOKEN)
+                message = (
+                    "🚫 Ваш аккаунт был удален из системы.\n\n"
+                    "Вы были удалены из всех корпоративных чатов."
+                )
+                await bot.send_message(chat_id=telegram_id, text=message)
+            except Exception as e:
+                print(f"ERROR: Failed to remove deleted user from chats: {e}")
+        
+        return {"status": "success", "message": "User deleted and removed from all chats"}
+    
     raise HTTPException(status_code=404, detail="User not found")
 
 # ==================== ROLE API ====================
