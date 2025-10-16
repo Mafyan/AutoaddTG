@@ -246,23 +246,36 @@ def get_admin_by_telegram_id(db: Session, telegram_id: int) -> Optional[Admin]:
 def add_user_to_role_chats(db: Session, user_id: int) -> bool:
     """Add user to all chats associated with their role."""
     try:
+        from database.models import role_chats as role_chats_table
+        
         user = get_user_by_id(db, user_id)
         if not user or not user.role_id or not user.telegram_id:
+            print(f"DEBUG: Cannot add user to role chats - user: {user}, role_id: {user.role_id if user else None}, telegram_id: {user.telegram_id if user else None}")
             return False
         
-        # Get all chats for this role
-        role_chats = db.query(Chat).join(role_chats).filter(
-            role_chats.c.role_id == user.role_id
-        ).all()
+        # Get all chats for this role using the relationship
+        role = get_role_by_id(db, user.role_id)
+        if not role:
+            print(f"DEBUG: Role {user.role_id} not found")
+            return False
         
-        # Add user to each chat
-        for chat in role_chats:
-            add_chat_member(db, chat.chat_id, user.telegram_id, 
-                          user.username, user.first_name, user.last_name)
+        chats = role.chats
+        print(f"DEBUG: Found {len(chats)} chats for role '{role.name}' (ID: {role.id})")
+        
+        # Add user to each chat in database
+        for chat in chats:
+            if chat.chat_id:  # Only if chat has Telegram ID
+                print(f"DEBUG: Adding user {user.telegram_id} to chat {chat.chat_id} ({chat.chat_name}) in database")
+                add_chat_member(db, chat.chat_id, user.telegram_id, 
+                              user.username, user.first_name, user.last_name)
+            else:
+                print(f"DEBUG: Skipping chat '{chat.chat_name}' - no Telegram ID")
         
         return True
     except Exception as e:
         print(f"Error adding user to role chats: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def remove_user_from_role_chats(db: Session, user_id: int) -> bool:

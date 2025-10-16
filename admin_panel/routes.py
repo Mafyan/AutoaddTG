@@ -160,9 +160,18 @@ async def api_approve_request(
     # Add user to all chats for this role
     if user.telegram_id:
         try:
+            print(f"\n{'='*60}")
+            print(f"✅ APPROVING USER {user_id}")
+            print(f"{'='*60}")
+            print(f"👤 User: {user.first_name} {user.last_name or ''}")
+            print(f"📱 Telegram ID: {user.telegram_id}")
+            print(f"👔 Role ID: {role_id}")
+            print(f"{'='*60}\n")
+            
             # Add user to role chats in database
+            print(f"📝 Step 1: Adding user to role chats in database...")
             success = add_user_to_role_chats(db, user_id)
-            print(f"DEBUG: Added user to role chats: {success}")
+            print(f"{'✅' if success else '❌'} Database update: {success}\n")
             
             # Try to add to actual Telegram chats
             from bot.chat_manager import ChatManager
@@ -170,21 +179,29 @@ async def api_approve_request(
             
             # Get all chats for this role
             chats = get_chats_by_role(db, role_id)
-            print(f"DEBUG: Found {len(chats)} chats for role {role_id}")
+            print(f"📊 Step 2: Found {len(chats)} chats for role {role_id}")
             
             # Add user to each Telegram chat
-            for chat in chats:
+            print(f"🚀 Step 3: Adding user to Telegram chats...\n")
+            for idx, chat in enumerate(chats, 1):
                 if chat.chat_id:  # Only if chat has Telegram ID
                     try:
+                        print(f"  [{idx}/{len(chats)}] Chat: {chat.chat_name} (ID: {chat.chat_id})")
                         success = await chat_manager.add_user_to_chat(chat.chat_id, user.telegram_id)
                         if success:
-                            print(f"DEBUG: Successfully added user to Telegram chat {chat.chat_id}")
+                            print(f"  ✅ Successfully added\n")
                         else:
-                            print(f"DEBUG: Failed to add user to Telegram chat {chat.chat_id}")
+                            print(f"  ❌ Failed to add\n")
                     except Exception as e:
-                        print(f"DEBUG: Error adding user to Telegram chat {chat.chat_id}: {e}")
+                        print(f"  ❌ Error: {e}\n")
+                else:
+                    print(f"  [{idx}/{len(chats)}] Chat: {chat.chat_name} - ⚠️  No Telegram ID, skipping\n")
+            
+            print(f"{'='*60}\n")
         except Exception as e:
-            print(f"DEBUG: Error in chat management: {e}")
+            print(f"❌ ERROR in chat management: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Send notification to user via Telegram
     if user.telegram_id and settings.BOT_TOKEN:
