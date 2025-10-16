@@ -266,18 +266,35 @@ async def api_fire_user(
     # Remove user from all Telegram chats
     if user.telegram_id and settings.BOT_TOKEN:
         try:
-            print(f"DEBUG: Starting fire process for user {user_id} with telegram_id {user.telegram_id}")
+            print(f"\n{'='*60}")
+            print(f"🔥 FIRING USER {user_id}")
+            print(f"{'='*60}")
+            print(f"👤 User Telegram ID: {user.telegram_id}")
+            print(f"📝 User Name: {user.first_name} {user.last_name or ''}")
+            print(f"📊 Active Chat IDs: {active_chat_ids}")
+            print(f"🔢 Total Chats: {len(active_chat_ids)}")
+            print(f"{'='*60}\n")
             
             from bot.chat_manager import ChatManager
             chat_manager = ChatManager(settings.BOT_TOKEN)
             
             if active_chat_ids:
                 # Remove user from all chats
-                print(f"DEBUG: Attempting to remove user from {len(active_chat_ids)} chats: {active_chat_ids}")
+                print(f"🚀 Starting removal from {len(active_chat_ids)} chats...")
                 removal_results = await chat_manager.remove_user_from_all_chats(user.telegram_id, active_chat_ids)
-                print(f"DEBUG: Removal results: {removal_results}")
+                
+                print(f"\n📊 REMOVAL RESULTS:")
+                for chat_id, result in removal_results.items():
+                    status = "✅ SUCCESS" if result['success'] else "❌ FAILED"
+                    error_msg = f" - {result['error']}" if result['error'] else ""
+                    print(f"  Chat {chat_id}: {status}{error_msg}")
+                print()
+                
+                # Count successes
+                success_count = sum(1 for r in removal_results.values() if r['success'])
+                print(f"✅ Successfully removed from {success_count}/{len(active_chat_ids)} chats")
             else:
-                print("DEBUG: No active chats found for user")
+                print("⚠️  WARNING: No active chats found for user")
             
             # Send notification to user
             bot = Bot(token=settings.BOT_TOKEN)
@@ -633,9 +650,26 @@ async def api_delete_user(
                 from bot.chat_manager import ChatManager
                 chat_manager = ChatManager(settings.BOT_TOKEN)
                 
-                print(f"DEBUG: Removing deleted user {telegram_id} from {len(active_chat_ids)} chats")
+                print(f"\n{'='*60}")
+                print(f"🗑️  DELETING USER {user_id}")
+                print(f"{'='*60}")
+                print(f"👤 User Telegram ID: {telegram_id}")
+                print(f"📊 Active Chat IDs: {active_chat_ids}")
+                print(f"🔢 Total Chats: {len(active_chat_ids)}")
+                print(f"{'='*60}\n")
+                
+                print(f"🚀 Starting removal from {len(active_chat_ids)} chats...")
                 removal_results = await chat_manager.remove_user_from_all_chats(telegram_id, active_chat_ids)
-                print(f"DEBUG: Removal results: {removal_results}")
+                
+                print(f"\n📊 REMOVAL RESULTS:")
+                for chat_id, result in removal_results.items():
+                    status = "✅ SUCCESS" if result['success'] else "❌ FAILED"
+                    error_msg = f" - {result['error']}" if result['error'] else ""
+                    print(f"  Chat {chat_id}: {status}{error_msg}")
+                print()
+                
+                success_count = sum(1 for r in removal_results.values() if r['success'])
+                print(f"✅ Successfully removed from {success_count}/{len(active_chat_ids)} chats")
                 
                 # Send notification
                 bot = Bot(token=settings.BOT_TOKEN)

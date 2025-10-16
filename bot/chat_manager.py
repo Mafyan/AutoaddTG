@@ -269,9 +269,10 @@ class ChatManager:
             logger.error(f"Failed to get chat member count: {e}")
             return 0
     
-    async def remove_user_from_chat(self, chat_id: int, user_telegram_id: int) -> bool:
+    async def kick_user_from_chat(self, chat_id: int, user_telegram_id: int) -> bool:
         """
-        Remove user from specific chat.
+        Kick user from specific chat (ban and immediately unban).
+        This removes the user but allows them to rejoin if they have a link.
         
         Args:
             chat_id: Telegram chat ID
@@ -281,12 +282,29 @@ class ChatManager:
             True if successful, False otherwise
         """
         try:
-            # Try to kick user from chat
-            await self.bot.ban_chat_member(chat_id, user_telegram_id)
-            logger.info(f"Successfully removed user {user_telegram_id} from chat {chat_id}")
-            return True
-        except TelegramError as e:
-            logger.error(f"Failed to remove user {user_telegram_id} from chat {chat_id}: {e}")
+            # Check if bot is admin in the chat
+            try:
+                bot_member = await self.bot.get_chat_member(chat_id, self.bot.id)
+                if bot_member.status not in ['administrator', 'creator']:
+                    logger.warning(f"Bot is not admin in chat {chat_id}, cannot remove user {user_telegram_id}")
+                    return False
+            except TelegramError as e:
+                logger.error(f"Failed to check bot status in chat {chat_id}: {e}")
+                return False
+            
+            # Try to kick user from chat (ban then unban)
+            try:
+                await self.bot.ban_chat_member(chat_id, user_telegram_id)
+                # ВАЖНО: сразу разбанить, чтобы пользователь мог вернуться позже
+                await self.bot.unban_chat_member(chat_id, user_telegram_id)
+                logger.info(f"Successfully kicked user {user_telegram_id} from chat {chat_id}")
+                return True
+            except TelegramError as e:
+                logger.error(f"Failed to kick user {user_telegram_id} from chat {chat_id}: {e}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Unexpected error kicking user {user_telegram_id} from chat {chat_id}: {e}")
             return False
     
     async def remove_user_from_all_chats(self, user_telegram_id: int, chat_ids: List[int]) -> dict:
@@ -304,11 +322,20 @@ class ChatManager:
         
         for chat_id in chat_ids:
             try:
-                success = await self.remove_user_from_chat(chat_id, user_telegram_id)
+                # Use kick_user_from_chat which properly unbans after kicking
+                success = await self.kick_user_from_chat(chat_id, user_telegram_id)
                 results[chat_id] = {
                     'success': success,
-                    'error': None if success else 'Failed to remove user'
+                    'error': None if success else 'Failed to remove user (bot may not be admin)'
                 }
+                
+                # Also update database to mark user as left
+                db = SessionLocal()
+                try:
+                    remove_chat_member(db, chat_id, user_telegram_id)
+                finally:
+                    db.close()
+                    
             except Exception as e:
                 results[chat_id] = {
                     'success': False,
