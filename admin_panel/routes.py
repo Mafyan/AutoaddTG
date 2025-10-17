@@ -17,7 +17,9 @@ from database.crud import (
     get_roles, get_role_by_id, create_role, update_role, delete_role, assign_chats_to_role,
     get_chats, get_chat_by_id, create_chat, update_chat, delete_chat,
     get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users,
-    get_user_chats, add_user_to_role_chats, get_user_chat_memberships
+    get_user_chats, add_user_to_role_chats, get_user_chat_memberships,
+    get_all_admins, get_admin_by_id, create_admin, delete_admin, update_admin_password,
+    get_admin_by_username
 )
 from database.models import Admin, ChatMember
 from admin_panel.auth import create_access_token, get_current_admin
@@ -58,6 +60,14 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     role_id: Optional[int] = None
     status: Optional[str] = None
+
+class AdminCreate(BaseModel):
+    username: str
+    password: str
+    telegram_id: Optional[int] = None
+
+class AdminPasswordUpdate(BaseModel):
+    password: str
 
 # ==================== AUTHENTICATION ROUTES ====================
 
@@ -105,6 +115,11 @@ async def roles_page(request: Request):
 async def chats_page(request: Request):
     """Chats page."""
     return templates.TemplateResponse("chats.html", {"request": request})
+
+@router.get("/admins", response_class=HTMLResponse)
+async def admins_page(request: Request):
+    """Admins page."""
+    return templates.TemplateResponse("admins.html", {"request": request})
 
 # ==================== STATISTICS API ====================
 
@@ -1079,4 +1094,168 @@ async def api_upload_chat_photo(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to upload photo: {str(e)}")
+
+# ==================== ADMIN MANAGEMENT API ====================
+
+@router.get("/api/admins")
+async def api_get_admins(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get all administrators. Only admin user can access this."""
+    # Check if current user is the main admin
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only main admin can manage administrators"
+        )
+    
+    admins = get_all_admins(db, limit=1000)
+    return [{
+        "id": admin.id,
+        "username": admin.username,
+        "telegram_id": admin.telegram_id,
+        "created_at": admin.created_at.isoformat() if admin.created_at else None
+    } for admin in admins]
+
+@router.post("/api/admins")
+async def api_create_admin(
+    admin_data: AdminCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Create new administrator. Only admin user can do this."""
+    # Check if current user is the main admin
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only main admin can create administrators"
+        )
+    
+    # Check if username already exists
+    existing_admin = get_admin_by_username(db, admin_data.username)
+    if existing_admin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists"
+        )
+    
+    # Validate password strength
+    if len(admin_data.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+    
+    try:
+        new_admin = create_admin(
+            db,
+            username=admin_data.username,
+            password=admin_data.password,
+            telegram_id=admin_data.telegram_id
+        )
+        
+        print(f"✅ New administrator created: {new_admin.username} (ID: {new_admin.id})")
+        
+        return {
+            "status": "success",
+            "message": "Administrator created successfully",
+            "admin": {
+                "id": new_admin.id,
+                "username": new_admin.username,
+                "telegram_id": new_admin.telegram_id
+            }
+        }
+    except Exception as e:
+        print(f"❌ Error creating administrator: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create administrator: {str(e)}"
+        )
+
+@router.put("/api/admins/{admin_id}/password")
+async def api_update_admin_password(
+    admin_id: int,
+    password_data: AdminPasswordUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Update administrator password. Admin can change any password, others only their own."""
+    # Check if current user is main admin or updating their own password
+    if current_admin.username != "admin" and current_admin.id != admin_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only change your own password"
+        )
+    
+    # Validate password strength
+    if len(password_data.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+    
+    try:
+        admin = update_admin_password(db, admin_id, password_data.password)
+        if not admin:
+            raise HTTPException(status_code=404, detail="Administrator not found")
+        
+        print(f"✅ Password updated for administrator: {admin.username}")
+        
+        return {
+            "status": "success",
+            "message": "Password updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error updating password: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update password: {str(e)}"
+        )
+
+@router.delete("/api/admins/{admin_id}")
+async def api_delete_admin(
+    admin_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Delete administrator. Only main admin can do this."""
+    # Check if current user is the main admin
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only main admin can delete administrators"
+        )
+    
+    # Prevent deleting self
+    if current_admin.id == admin_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own administrator account"
+        )
+    
+    # Get admin info before deleting
+    admin_to_delete = get_admin_by_id(db, admin_id)
+    if not admin_to_delete:
+        raise HTTPException(status_code=404, detail="Administrator not found")
+    
+    try:
+        if delete_admin(db, admin_id):
+            print(f"✅ Administrator deleted: {admin_to_delete.username} (ID: {admin_id})")
+            return {
+                "status": "success",
+                "message": "Administrator deleted successfully"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Administrator not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error deleting administrator: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete administrator: {str(e)}"
+        )
 

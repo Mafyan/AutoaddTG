@@ -243,6 +243,45 @@ def get_admin_by_telegram_id(db: Session, telegram_id: int) -> Optional[Admin]:
     """Get admin by Telegram ID."""
     return db.query(Admin).filter(Admin.telegram_id == telegram_id).first()
 
+def get_all_admins(db: Session, skip: int = 0, limit: int = 100) -> List[Admin]:
+    """Get list of all administrators."""
+    return db.query(Admin).offset(skip).limit(limit).all()
+
+def get_admin_by_id(db: Session, admin_id: int) -> Optional[Admin]:
+    """Get admin by ID."""
+    return db.query(Admin).filter(Admin.id == admin_id).first()
+
+def create_admin(db: Session, username: str, password: str, telegram_id: Optional[int] = None) -> Admin:
+    """Create a new administrator."""
+    password_hash = pwd_context.hash(password)
+    admin = Admin(
+        username=username,
+        password_hash=password_hash,
+        telegram_id=telegram_id
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return admin
+
+def update_admin_password(db: Session, admin_id: int, new_password: str) -> Optional[Admin]:
+    """Update admin password."""
+    admin = get_admin_by_id(db, admin_id)
+    if admin:
+        admin.password_hash = pwd_context.hash(new_password)
+        db.commit()
+        db.refresh(admin)
+    return admin
+
+def delete_admin(db: Session, admin_id: int) -> bool:
+    """Delete admin."""
+    admin = get_admin_by_id(db, admin_id)
+    if admin:
+        db.delete(admin)
+        db.commit()
+        return True
+    return False
+
 def add_user_to_role_chats(db: Session, user_id: int) -> bool:
     """Add user to all chats associated with their role."""
     try:
