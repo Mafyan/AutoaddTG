@@ -466,23 +466,23 @@ class ChatManager:
     async def get_chat_members_from_telegram(self, chat_id: int) -> List[dict]:
         """
         Get all members from a Telegram chat.
-        Uses pyrogram if configured for full member list, otherwise uses Bot API (limited).
+        
+        ВАЖНО: Bot API не может получить полный список участников супергруппы!
+        Для полного списка нужен User Account, но это ОПАСНО для блокировки.
+        
+        Система работает безопасно: пользователи сами присоединяются по invite links,
+        а при увольнении кикаются через роли.
         
         Args:
             chat_id: Telegram chat ID
             
         Returns:
-            List of member information dictionaries
+            List of member information dictionaries (только администраторы)
         """
         try:
-            # Try using pyrogram for full member list if configured
-            from config import settings
-            if settings.API_ID and settings.API_HASH:
-                return await self._get_members_with_pyrogram(chat_id)
-            
-            # Fallback to Bot API (limited to admins only)
-            print(f"⚠️  WARNING: Using Bot API for members (only admins will be detected)")
-            print(f"   For full member sync, configure API_ID and API_HASH in .env")
+            # Используем только Bot API (безопасно, но только админы)
+            print(f"ℹ️  INFO: Getting chat administrators (Bot API limitation)")
+            print(f"   Full member sync disabled for safety (risk of account ban)")
             return await self._get_members_with_bot_api(chat_id)
             
         except Exception as e:
@@ -490,47 +490,24 @@ class ChatManager:
             return []
     
     async def _get_members_with_pyrogram(self, chat_id: int) -> List[dict]:
-        """Get all members using pyrogram (Telegram Client API)."""
-        try:
-            from pyrogram import Client
-            from config import settings
-            
-            members = []
-            
-            # Create pyrogram client
-            async with Client(
-                "bot_session",
-                api_id=settings.API_ID,
-                api_hash=settings.API_HASH,
-                bot_token=settings.BOT_TOKEN
-            ) as app:
-                print(f"DEBUG: Using pyrogram to get members from chat {chat_id}")
-                
-                # Iterate through all members
-                async for member in app.get_chat_members(chat_id):
-                    # Skip deleted accounts and bots
-                    if member.user.is_deleted or member.user.is_bot:
-                        continue
-                    
-                    member_info = {
-                        'id': member.user.id,
-                        'username': member.user.username,
-                        'first_name': member.user.first_name,
-                        'last_name': member.user.last_name,
-                        'is_admin': member.status in ['creator', 'administrator'],
-                        'is_bot': member.user.is_bot
-                    }
-                    members.append(member_info)
-                
-                print(f"DEBUG: Found {len(members)} members via pyrogram")
-                return members
-                
-        except ImportError:
-            print(f"ERROR: pyrogram not installed. Install with: pip install pyrogram tgcrypto")
-            return await self._get_members_with_bot_api(chat_id)
-        except Exception as e:
-            print(f"ERROR: Failed to get members with pyrogram: {e}")
-            return await self._get_members_with_bot_api(chat_id)
+        """
+        ОТКЛЮЧЕНО: Get all members using pyrogram (Telegram Client API).
+        
+        ПРИЧИНА ОТКЛЮЧЕНИЯ:
+        - Pyrogram с bot_token НЕ может получить полный список участников
+        - Для полного списка нужен User Account (phone + session)
+        - Использование User Account ОПАСНО - риск блокировки личного аккаунта!
+        - Telegram банит аккаунты за автоматизацию (нарушение ToS)
+        
+        БЕЗОПАСНАЯ АЛЬТЕРНАТИВА:
+        - Пользователи сами присоединяются по invite links
+        - Система отслеживает через БД (роли + chat_members)
+        - При увольнении кикаем через список ролей
+        - Полностью безопасно и соответствует ToS
+        """
+        print(f"⚠️  WARNING: Full member sync with pyrogram DISABLED for safety")
+        print(f"   Using Bot API (admins only) to avoid account ban risk")
+        return await self._get_members_with_bot_api(chat_id)
     
     async def _get_members_with_bot_api(self, chat_id: int) -> List[dict]:
         """Get members using Bot API (only admins are available)."""
