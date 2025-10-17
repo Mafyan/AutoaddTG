@@ -249,29 +249,59 @@ class ChatManager:
             True if successful, False otherwise
         """
         try:
+            print(f"DEBUG kick_user_from_chat: Attempting to kick user {user_telegram_id} from chat {chat_id}")
+            
+            # Get bot info
+            try:
+                bot_info = await self.bot.get_me()
+                bot_id = bot_info.id
+                print(f"DEBUG: Bot ID: {bot_id}")
+            except Exception as e:
+                print(f"ERROR: Could not get bot info: {e}")
+                return False
+            
             # Check if bot is admin in the chat
             try:
-                bot_member = await self.bot.get_chat_member(chat_id, self.bot.id)
+                bot_member = await self.bot.get_chat_member(chat_id, bot_id)
+                print(f"DEBUG: Bot status in chat {chat_id}: {bot_member.status}")
+                print(f"DEBUG: Bot permissions: can_restrict_members={bot_member.can_restrict_members}")
+                
                 if bot_member.status not in ['administrator', 'creator']:
                     logger.warning(f"Bot is not admin in chat {chat_id}, cannot remove user {user_telegram_id}")
+                    print(f"ERROR: Bot is not admin (status: {bot_member.status})")
                     return False
+                    
+                # Check specific permission
+                if bot_member.status == 'administrator' and not bot_member.can_restrict_members:
+                    logger.warning(f"Bot cannot restrict members in chat {chat_id}")
+                    print(f"ERROR: Bot lacks 'Ban users' permission")
+                    return False
+                    
             except TelegramError as e:
                 logger.error(f"Failed to check bot status in chat {chat_id}: {e}")
+                print(f"ERROR: Failed to check bot status: {e}")
                 return False
             
             # Try to kick user from chat (ban then unban)
             try:
+                print(f"DEBUG: Banning user {user_telegram_id}...")
                 await self.bot.ban_chat_member(chat_id, user_telegram_id)
+                print(f"DEBUG: User banned, now unbanning...")
                 # ВАЖНО: сразу разбанить, чтобы пользователь мог вернуться позже
                 await self.bot.unban_chat_member(chat_id, user_telegram_id)
                 logger.info(f"Successfully kicked user {user_telegram_id} from chat {chat_id}")
+                print(f"SUCCESS: User {user_telegram_id} kicked from chat {chat_id}")
                 return True
             except TelegramError as e:
                 logger.error(f"Failed to kick user {user_telegram_id} from chat {chat_id}: {e}")
+                print(f"ERROR: Failed to ban/unban: {e}")
                 return False
                 
         except Exception as e:
             logger.error(f"Unexpected error kicking user {user_telegram_id} from chat {chat_id}: {e}")
+            print(f"ERROR: Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def remove_user_from_all_chats(self, user_telegram_id: int, chat_ids: List[int]) -> dict:
