@@ -1197,15 +1197,24 @@ async def api_update_admin_password(
     
     try:
         # Get admin first to verify it exists
+        print(f"DEBUG: Getting admin with ID {admin_id}")
         admin_to_update = get_admin_by_id(db, admin_id)
+        print(f"DEBUG: admin_to_update type: {type(admin_to_update)}, value: {admin_to_update}")
+        
         if not admin_to_update:
             raise HTTPException(status_code=404, detail="Administrator not found")
         
+        print(f"DEBUG: Admin found: {admin_to_update.username}")
+        
         # Update password
+        print(f"DEBUG: Calling update_admin_password")
         updated_admin = update_admin_password(db, admin_id, password_data.password)
+        print(f"DEBUG: updated_admin type: {type(updated_admin)}, value: {updated_admin}")
+        
         if not updated_admin:
             raise HTTPException(status_code=404, detail="Administrator not found")
         
+        print(f"DEBUG: About to access username attribute")
         print(f"✅ Password updated for administrator: {updated_admin.username}")
         
         return {
