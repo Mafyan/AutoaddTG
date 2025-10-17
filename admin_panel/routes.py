@@ -1196,11 +1196,17 @@ async def api_update_admin_password(
         )
     
     try:
-        admin = update_admin_password(db, admin_id, password_data.password)
-        if not admin:
+        # Get admin first to verify it exists
+        admin_to_update = get_admin_by_id(db, admin_id)
+        if not admin_to_update:
             raise HTTPException(status_code=404, detail="Administrator not found")
         
-        print(f"✅ Password updated for administrator: {admin.username}")
+        # Update password
+        updated_admin = update_admin_password(db, admin_id, password_data.password)
+        if not updated_admin:
+            raise HTTPException(status_code=404, detail="Administrator not found")
+        
+        print(f"✅ Password updated for administrator: {updated_admin.username}")
         
         return {
             "status": "success",
@@ -1210,6 +1216,8 @@ async def api_update_admin_password(
         raise
     except Exception as e:
         print(f"❌ Error updating password: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update password: {str(e)}"

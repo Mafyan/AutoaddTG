@@ -267,10 +267,12 @@ def create_admin(db: Session, username: str, password: str, telegram_id: Optiona
 def update_admin_password(db: Session, admin_id: int, new_password: str) -> Optional[Admin]:
     """Update admin password."""
     admin = get_admin_by_id(db, admin_id)
-    if admin:
-        admin.password_hash = pwd_context.hash(new_password)
-        db.commit()
-        db.refresh(admin)
+    if not admin:
+        return None
+    
+    admin.password_hash = pwd_context.hash(new_password)
+    db.commit()
+    db.refresh(admin)
     return admin
 
 def delete_admin(db: Session, admin_id: int) -> bool:
