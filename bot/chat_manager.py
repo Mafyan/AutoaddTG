@@ -59,57 +59,41 @@ class ChatManager:
             logger.error(f"Failed to join chat {chat_link}: {e}")
             return None
     
-    async def add_user_to_chat(self, chat_id: int, user_telegram_id: int, 
-                              username: str = None, first_name: str = None, 
-                              last_name: str = None) -> bool:
+    async def ensure_user_not_banned(self, chat_id: int, user_telegram_id: int) -> bool:
         """
-        Add user to chat and track in database.
+        Ensure user is not banned in chat (unban if needed).
+        NOTE: This does NOT add users to chat - Bot API cannot add users to groups.
+        Users must join via invite link.
         
         Args:
             chat_id: Telegram chat ID
             user_telegram_id: User's Telegram ID
-            username: User's username
-            first_name: User's first name
-            last_name: User's last name
             
         Returns:
-            True if successful, False otherwise
+            True if user is not banned, False if error
         """
         try:
-            # Add to database first
-            db = SessionLocal()
-            try:
-                add_chat_member(
-                    db, chat_id, user_telegram_id, 
-                    username, first_name, last_name
-                )
-            finally:
-                db.close()
+            # Check if bot has admin rights
+            bot_member = await self.bot.get_chat_member(chat_id, self.bot.id)
+            if bot_member.status not in ['administrator', 'creator']:
+                logger.warning(f"Bot is not admin in chat {chat_id}")
+                return False
             
-            # Try to add user to chat (this might fail if bot doesn't have permissions)
+            # Unban user if they were banned
             try:
-                await self.bot.unban_chat_member(chat_id, user_telegram_id)
-                logger.info(f"Added user {user_telegram_id} to chat {chat_id}")
+                await self.bot.unban_chat_member(chat_id, user_telegram_id, only_if_banned=True)
+                logger.info(f"Unbanned user {user_telegram_id} in chat {chat_id}")
                 return True
-            except BadRequest as e:
-                if "USER_NOT_PARTICIPANT" in str(e):
-                    # User is not in chat, try to invite
-                    try:
-                        await self.bot.send_message(
-                            chat_id=user_telegram_id,
-                            text=f"Вы были добавлены в чат. Перейдите по ссылке для вступления."
-                        )
-                        logger.info(f"Sent invitation to user {user_telegram_id}")
-                        return True
-                    except TelegramError:
-                        logger.error(f"Failed to send invitation to user {user_telegram_id}")
-                        return False
-                else:
-                    logger.error(f"Failed to add user to chat: {e}")
-                    return False
+            except TelegramError as e:
+                # Not banned = OK
+                if "not banned" in str(e).lower() or "not a member" in str(e).lower():
+                    logger.info(f"User {user_telegram_id} is not banned in chat {chat_id}")
+                    return True
+                logger.error(f"Error unbanning user {user_telegram_id} in chat {chat_id}: {e}")
+                return False
                     
         except Exception as e:
-            logger.error(f"Error adding user to chat: {e}")
+            logger.error(f"Error checking ban status for user {user_telegram_id} in chat {chat_id}: {e}")
             return False
     
     async def remove_user_from_chat(self, chat_id: int, user_telegram_id: int) -> bool:
@@ -146,21 +130,15 @@ class ChatManager:
             logger.error(f"Error removing user from chat: {e}")
             return False
     
-    async def add_user_to_role_chats(self, user_telegram_id: int, role_id: int,
-                                   username: str = None, first_name: str = None,
-                                   last_name: str = None) -> List[dict]:
+    async def get_role_chat_invite_links(self, role_id: int) -> List[dict]:
         """
-        Add user to all chats assigned to a role.
+        Get invite links for all chats assigned to a role.
         
         Args:
-            user_telegram_id: User's Telegram ID
             role_id: Role ID
-            username: User's username
-            first_name: User's first name
-            last_name: User's last name
             
         Returns:
-            List of results for each chat
+            List of chat info with invite links
         """
         db = SessionLocal()
         try:
@@ -168,20 +146,37 @@ class ChatManager:
             results = []
             
             for chat in chats:
-                if chat.chat_id:  # Only process chats with known chat_id
-                    success = await self.add_user_to_chat(
-                        chat.chat_id, user_telegram_id,
-                        username, first_name, last_name
-                    )
-                    results.append({
-                        "chat_name": chat.chat_name,
-                        "chat_id": chat.chat_id,
-                        "success": success
-                    })
+                if chat.chat_id:
+                    try:
+                        # Get or create invite link
+                        if not chat.chat_link:
+                            invite_link = await self.bot.export_chat_invite_link(chat.chat_id)
+                            # Update DB with new link
+                            from database.crud import update_chat
+                            update_chat(db, chat.id, chat_link=invite_link)
+                        else:
+                            invite_link = chat.chat_link
+                        
+                        results.append({
+                            "chat_name": chat.chat_name,
+                            "chat_id": chat.chat_id,
+                            "invite_link": invite_link,
+                            "success": True
+                        })
+                    except TelegramError as e:
+                        logger.error(f"Failed to get invite link for chat {chat.chat_id}: {e}")
+                        results.append({
+                            "chat_name": chat.chat_name,
+                            "chat_id": chat.chat_id,
+                            "invite_link": None,
+                            "success": False,
+                            "error": str(e)
+                        })
                 else:
                     results.append({
                         "chat_name": chat.chat_name,
                         "chat_id": None,
+                        "invite_link": None,
                         "success": False,
                         "error": "Chat ID not set"
                     })
@@ -191,34 +186,6 @@ class ChatManager:
         finally:
             db.close()
     
-    async def remove_user_from_all_chats(self, user_telegram_id: int) -> List[dict]:
-        """
-        Remove user from all chats they are a member of.
-        
-        Args:
-            user_telegram_id: User's Telegram ID
-            
-        Returns:
-            List of results for each chat
-        """
-        db = SessionLocal()
-        try:
-            user_chats = get_user_chats(db, user_telegram_id)
-            results = []
-            
-            for chat_member in user_chats:
-                success = await self.remove_user_from_chat(
-                    chat_member.chat_id, user_telegram_id
-                )
-                results.append({
-                    "chat_id": chat_member.chat_id,
-                    "success": success
-                })
-            
-            return results
-            
-        finally:
-            db.close()
     
     async def fire_user_and_remove_from_chats(self, user_id: int) -> dict:
         """
@@ -309,7 +276,7 @@ class ChatManager:
     
     async def remove_user_from_all_chats(self, user_telegram_id: int, chat_ids: List[int]) -> dict:
         """
-        Remove user from all specified chats.
+        Remove user from all specified chats with rate limiting protection.
         
         Args:
             user_telegram_id: User's Telegram ID
@@ -320,7 +287,7 @@ class ChatManager:
         """
         results = {}
         
-        for chat_id in chat_ids:
+        for idx, chat_id in enumerate(chat_ids, 1):
             try:
                 # Use kick_user_from_chat which properly unbans after kicking
                 success = await self.kick_user_from_chat(chat_id, user_telegram_id)
@@ -335,7 +302,28 @@ class ChatManager:
                     remove_chat_member(db, chat_id, user_telegram_id)
                 finally:
                     db.close()
+                
+                # ⚠️ RATE LIMITING: Wait between requests to avoid FloodWait
+                # Telegram limit: ~1-2 ban operations per second
+                if idx < len(chat_ids):  # Don't wait after last request
+                    await asyncio.sleep(1.5)  # 1.5 seconds between bans
                     
+            except TelegramError as e:
+                # Handle FloodWait specifically
+                if "FLOOD_WAIT" in str(e):
+                    import re
+                    wait_time = int(re.search(r'\d+', str(e)).group())
+                    logger.warning(f"FloodWait: waiting {wait_time} seconds")
+                    await asyncio.sleep(wait_time)
+                    # Retry this chat
+                    try:
+                        success = await self.kick_user_from_chat(chat_id, user_telegram_id)
+                        results[chat_id] = {'success': success, 'error': None}
+                    except Exception as retry_e:
+                        results[chat_id] = {'success': False, 'error': str(retry_e)}
+                else:
+                    results[chat_id] = {'success': False, 'error': str(e)}
+                    logger.error(f"Error removing user {user_telegram_id} from chat {chat_id}: {e}")
             except Exception as e:
                 results[chat_id] = {
                     'success': False,
@@ -386,6 +374,7 @@ class ChatManager:
                 'errors': 0
             }
             
+            ban_count = 0
             for member in chat_members:
                 try:
                     user_telegram_id = member['id']
@@ -406,20 +395,32 @@ class ChatManager:
                         # User is not authorized - remove from chat
                         print(f"DEBUG: User {user_telegram_id} ({member.get('first_name')}) is NOT authorized, attempting to remove...")
                         try:
+                            # ⚠️ RATE LIMITING: Add delay every 5 bans
+                            if ban_count > 0 and ban_count % 5 == 0:
+                                print(f"DEBUG: Rate limiting - waiting 3 seconds after {ban_count} bans")
+                                await asyncio.sleep(3)
+                            
                             # First try to ban the user
                             await self.bot.ban_chat_member(chat_id, user_telegram_id)
                             print(f"DEBUG: Successfully banned unauthorized user {user_telegram_id} from chat {chat_id}")
                             results['removed_unauthorized'] += 1
-                        except Exception as e:
-                            print(f"DEBUG: Could not ban user {user_telegram_id}: {e}")
-                            # Try to kick instead
-                            try:
-                                await self.bot.kick_chat_member(chat_id, user_telegram_id)
-                                print(f"DEBUG: Successfully kicked unauthorized user {user_telegram_id} from chat {chat_id}")
-                                results['removed_unauthorized'] += 1
-                            except Exception as e2:
-                                print(f"DEBUG: Could not kick user {user_telegram_id}: {e2}")
+                            ban_count += 1
+                            
+                            # Small delay between each ban
+                            await asyncio.sleep(0.5)
+                            
+                        except TelegramError as e:
+                            if "FLOOD_WAIT" in str(e):
+                                import re
+                                wait_time = int(re.search(r'\d+', str(e)).group())
+                                print(f"⚠️  FloodWait detected! Waiting {wait_time} seconds...")
+                                await asyncio.sleep(wait_time + 1)
+                            else:
+                                print(f"DEBUG: Could not ban user {user_telegram_id}: {e}")
                                 results['errors'] += 1
+                        except Exception as e:
+                            print(f"DEBUG: Could not remove user {user_telegram_id}: {e}")
+                            results['errors'] += 1
                             
                 except Exception as e:
                     print(f"DEBUG: Error processing member {member}: {e}")
@@ -435,6 +436,7 @@ class ChatManager:
     async def get_chat_members_from_telegram(self, chat_id: int) -> List[dict]:
         """
         Get all members from a Telegram chat.
+        Uses pyrogram if configured for full member list, otherwise uses Bot API (limited).
         
         Args:
             chat_id: Telegram chat ID
@@ -443,116 +445,91 @@ class ChatManager:
             List of member information dictionaries
         """
         try:
-            members = []
+            # Try using pyrogram for full member list if configured
+            from config import settings
+            if settings.API_ID and settings.API_HASH:
+                return await self._get_members_with_pyrogram(chat_id)
             
-            # Get chat administrators first
-            try:
-                administrators = await self.bot.get_chat_administrators(chat_id)
-                for admin in administrators:
-                    # Skip bots
-                    if admin.user.is_bot:
-                        continue
-                        
-                    member_info = {
-                        'id': admin.user.id,
-                        'username': admin.user.username,
-                        'first_name': admin.user.first_name,
-                        'last_name': admin.user.last_name,
-                        'is_admin': True,
-                        'is_bot': admin.user.is_bot
-                    }
-                    members.append(member_info)
-                    print(f"DEBUG: Found admin {admin.user.id} ({admin.user.first_name})")
-            except Exception as e:
-                print(f"DEBUG: Could not get administrators: {e}")
-            
-            # Try to get all members using get_chat_member_count and iterate
-            try:
-                # Get chat member count
-                member_count = await self.bot.get_chat_member_count(chat_id)
-                print(f"DEBUG: Chat {chat_id} has {member_count} members")
-                
-                # For now, we'll use a different approach - get members from recent activity
-                # This is a limitation of Telegram API - we can't get all members directly
-                
-            except Exception as e:
-                print(f"DEBUG: Could not get member count: {e}")
-            
-            # Get members from recent messages (this is our main method)
-            try:
-                # Get more updates to find more members
-                updates = await self.bot.get_updates(limit=500, timeout=30)
-                print(f"DEBUG: Got {len(updates)} updates")
-                
-                for update in updates:
-                    if (update.message and 
-                        update.message.chat and 
-                        update.message.chat.id == chat_id and 
-                        update.message.from_user):
-                        
-                        user = update.message.from_user
-                        
-                        # Skip bots
-                        if user.is_bot:
-                            continue
-                            
-                        # Check if we already have this user
-                        if not any(m['id'] == user.id for m in members):
-                            member_info = {
-                                'id': user.id,
-                                'username': user.username,
-                                'first_name': user.first_name,
-                                'last_name': user.last_name,
-                                'is_admin': False,
-                                'is_bot': user.is_bot
-                            }
-                            members.append(member_info)
-                            print(f"DEBUG: Found member {user.id} ({user.first_name}) from messages")
-                    
-                    # Also check for new chat members
-                    if (update.message and 
-                        update.message.chat and 
-                        update.message.chat.id == chat_id and 
-                        update.message.new_chat_members):
-                        
-                        for user in update.message.new_chat_members:
-                            if user.is_bot:
-                                continue
-                                
-                            if not any(m['id'] == user.id for m in members):
-                                member_info = {
-                                    'id': user.id,
-                                    'username': user.username,
-                                    'first_name': user.first_name,
-                                    'last_name': user.last_name,
-                                    'is_admin': False,
-                                    'is_bot': user.is_bot
-                                }
-                                members.append(member_info)
-                                print(f"DEBUG: Found new member {user.id} ({user.first_name}) from new_chat_members")
-                    
-                    # Check for left chat members
-                    if (update.message and 
-                        update.message.chat and 
-                        update.message.chat.id == chat_id and 
-                        update.message.left_chat_member):
-                        
-                        user = update.message.left_chat_member
-                        if user.is_bot:
-                            continue
-                            
-                        # Remove from our list if present
-                        members = [m for m in members if m['id'] != user.id]
-                        print(f"DEBUG: Removed left member {user.id} ({user.first_name})")
-                        
-            except Exception as e:
-                print(f"DEBUG: Could not get members from messages: {e}")
-            
-            print(f"DEBUG: Total members found: {len(members)}")
-            return members
+            # Fallback to Bot API (limited to admins only)
+            print(f"⚠️  WARNING: Using Bot API for members (only admins will be detected)")
+            print(f"   For full member sync, configure API_ID and API_HASH in .env")
+            return await self._get_members_with_bot_api(chat_id)
             
         except Exception as e:
             logger.error(f"Failed to get chat members from Telegram: {e}")
+            return []
+    
+    async def _get_members_with_pyrogram(self, chat_id: int) -> List[dict]:
+        """Get all members using pyrogram (Telegram Client API)."""
+        try:
+            from pyrogram import Client
+            from config import settings
+            
+            members = []
+            
+            # Create pyrogram client
+            async with Client(
+                "bot_session",
+                api_id=settings.API_ID,
+                api_hash=settings.API_HASH,
+                bot_token=settings.BOT_TOKEN
+            ) as app:
+                print(f"DEBUG: Using pyrogram to get members from chat {chat_id}")
+                
+                # Iterate through all members
+                async for member in app.get_chat_members(chat_id):
+                    # Skip deleted accounts and bots
+                    if member.user.is_deleted or member.user.is_bot:
+                        continue
+                    
+                    member_info = {
+                        'id': member.user.id,
+                        'username': member.user.username,
+                        'first_name': member.user.first_name,
+                        'last_name': member.user.last_name,
+                        'is_admin': member.status in ['creator', 'administrator'],
+                        'is_bot': member.user.is_bot
+                    }
+                    members.append(member_info)
+                
+                print(f"DEBUG: Found {len(members)} members via pyrogram")
+                return members
+                
+        except ImportError:
+            print(f"ERROR: pyrogram not installed. Install with: pip install pyrogram tgcrypto")
+            return await self._get_members_with_bot_api(chat_id)
+        except Exception as e:
+            print(f"ERROR: Failed to get members with pyrogram: {e}")
+            return await self._get_members_with_bot_api(chat_id)
+    
+    async def _get_members_with_bot_api(self, chat_id: int) -> List[dict]:
+        """Get members using Bot API (only admins are available)."""
+        try:
+            members = []
+            
+            # Get chat administrators (only method available in Bot API)
+            administrators = await self.bot.get_chat_administrators(chat_id)
+            for admin in administrators:
+                # Skip bots
+                if admin.user.is_bot:
+                    continue
+                    
+                member_info = {
+                    'id': admin.user.id,
+                    'username': admin.user.username,
+                    'first_name': admin.user.first_name,
+                    'last_name': admin.user.last_name,
+                    'is_admin': True,
+                    'is_bot': admin.user.is_bot
+                }
+                members.append(member_info)
+                print(f"DEBUG: Found admin {admin.user.id} ({admin.user.first_name})")
+            
+            print(f"DEBUG: Found {len(members)} admins via Bot API (regular members cannot be listed)")
+            return members
+            
+        except Exception as e:
+            logger.error(f"Failed to get administrators: {e}")
             return []
     
     async def start_auto_sync(self):
@@ -625,25 +602,23 @@ class ChatManager:
         finally:
             db.close()
     
-    async def add_user_to_chat(self, chat_id: int, user_telegram_id: int) -> bool:
+    async def get_chat_invite_link(self, chat_id: int) -> Optional[str]:
         """
-        Add user to specific chat.
+        Get or create invite link for a chat.
         
         Args:
             chat_id: Telegram chat ID
-            user_telegram_id: User's Telegram ID
             
         Returns:
-            True if successful, False otherwise
+            Invite link or None if failed
         """
         try:
-            # Try to add user to chat
-            await self.bot.unban_chat_member(chat_id, user_telegram_id)
-            logger.info(f"Successfully added user {user_telegram_id} to chat {chat_id}")
-            return True
+            invite_link = await self.bot.export_chat_invite_link(chat_id)
+            logger.info(f"Got invite link for chat {chat_id}")
+            return invite_link
         except TelegramError as e:
-            logger.error(f"Failed to add user {user_telegram_id} to chat {chat_id}: {e}")
-            return False
+            logger.error(f"Failed to get invite link for chat {chat_id}: {e}")
+            return None
     
     async def get_bot_chats(self) -> List[dict]:
         """

@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # Telegram Bot
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
     
+    # Telegram Client (for pyrogram - optional, for full member sync)
+    API_ID: int = int(os.getenv("API_ID", "0"))
+    API_HASH: str = os.getenv("API_HASH", "")
+    
     # Admin Panel
     ADMIN_SECRET_KEY: str = os.getenv("ADMIN_SECRET_KEY", "")
     ADMIN_PANEL_HOST: str = os.getenv("ADMIN_PANEL_HOST", "0.0.0.0")

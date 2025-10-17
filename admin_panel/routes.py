@@ -157,7 +157,7 @@ async def api_approve_request(
     
     print(f"DEBUG: User {user_id} approved successfully")
     
-    # Add user to all chats for this role
+    # Add user to role chats in database
     if user.telegram_id:
         try:
             print(f"\n{'='*60}")
@@ -173,7 +173,7 @@ async def api_approve_request(
             success = add_user_to_role_chats(db, user_id)
             print(f"{'✅' if success else '❌'} Database update: {success}\n")
             
-            # Try to add to actual Telegram chats
+            # Ensure user is not banned from chats
             from bot.chat_manager import ChatManager
             chat_manager = ChatManager(settings.BOT_TOKEN)
             
@@ -181,17 +181,24 @@ async def api_approve_request(
             chats = get_chats_by_role(db, role_id)
             print(f"📊 Step 2: Found {len(chats)} chats for role {role_id}")
             
-            # Add user to each Telegram chat
-            print(f"🚀 Step 3: Adding user to Telegram chats...\n")
+            # Unban user from each Telegram chat (if they were banned)
+            print(f"🚀 Step 3: Ensuring user is not banned in chats...\n")
             for idx, chat in enumerate(chats, 1):
                 if chat.chat_id:  # Only if chat has Telegram ID
                     try:
                         print(f"  [{idx}/{len(chats)}] Chat: {chat.chat_name} (ID: {chat.chat_id})")
-                        success = await chat_manager.add_user_to_chat(chat.chat_id, user.telegram_id)
+                        # Ensure user is not banned (does NOT add them - they must join via invite link)
+                        success = await chat_manager.ensure_user_not_banned(chat.chat_id, user.telegram_id)
                         if success:
-                            print(f"  ✅ Successfully added\n")
+                            print(f"  ✅ User is not banned\n")
                         else:
-                            print(f"  ❌ Failed to add\n")
+                            print(f"  ⚠️  Could not verify ban status\n")
+                        
+                        # Rate limiting: small delay between chats
+                        if idx < len(chats):
+                            import asyncio
+                            await asyncio.sleep(0.5)
+                            
                     except Exception as e:
                         print(f"  ❌ Error: {e}\n")
                 else:
@@ -602,7 +609,7 @@ async def api_rehire_user(
             success = add_user_to_role_chats(db, user_id)
             print(f"DEBUG: Added user back to role chats: {success}")
             
-            # Try to add to actual Telegram chats
+            # Ensure user is not banned in chats
             from bot.chat_manager import ChatManager
             chat_manager = ChatManager(settings.BOT_TOKEN)
             
@@ -610,17 +617,17 @@ async def api_rehire_user(
             chats = get_chats_by_role(db, user.role_id)
             print(f"DEBUG: Found {len(chats)} chats for role {user.role_id}")
             
-            # Add user to each Telegram chat
+            # Unban user from each Telegram chat (if they were banned)
             for chat in chats:
                 if chat.chat_id:  # Only if chat has Telegram ID
                     try:
-                        success = await chat_manager.add_user_to_chat(chat.chat_id, user.telegram_id)
+                        success = await chat_manager.ensure_user_not_banned(chat.chat_id, user.telegram_id)
                         if success:
-                            print(f"DEBUG: Successfully added user to Telegram chat {chat.chat_id}")
+                            print(f"DEBUG: User is not banned in chat {chat.chat_id}")
                         else:
-                            print(f"DEBUG: Failed to add user to Telegram chat {chat.chat_id}")
+                            print(f"DEBUG: Could not verify ban status for chat {chat.chat_id}")
                     except Exception as e:
-                        print(f"DEBUG: Error adding user to Telegram chat {chat.chat_id}: {e}")
+                        print(f"DEBUG: Error checking ban status in chat {chat.chat_id}: {e}")
         except Exception as e:
             print(f"DEBUG: Error in chat management: {e}")
     
