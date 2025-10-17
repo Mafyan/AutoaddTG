@@ -16,7 +16,7 @@ from database.crud import (
     get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users,
     get_user_chats, add_user_to_role_chats, get_user_chat_memberships
 )
-from database.models import Admin
+from database.models import Admin, ChatMember
 from admin_panel.auth import create_access_token, get_current_admin
 from bot.utils import format_chat_links
 from config import settings
