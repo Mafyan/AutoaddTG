@@ -412,7 +412,7 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
             try:
                 from bot.chat_manager import ChatManager
                 chat_manager = ChatManager(settings.BOT_TOKEN)
-                await chat_manager.sync_chats_to_database()
+                await chat_manager.sync_chats_to_database(db)
                 print(f"DEBUG: Synced chats to database after bot addition")
             except Exception as e:
                 print(f"DEBUG: Error syncing chats: {e}")
@@ -482,7 +482,7 @@ async def handle_message_in_group(update: Update, context: ContextTypes.DEFAULT_
             try:
                 from bot.chat_manager import ChatManager
                 chat_manager = ChatManager(settings.BOT_TOKEN)
-                await chat_manager.sync_chats_to_database()
+                await chat_manager.sync_chats_to_database(db)
                 print(f"DEBUG: Synced chats to database after new chat detection")
             except Exception as e:
                 print(f"DEBUG: Error syncing chats: {e}")
