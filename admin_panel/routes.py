@@ -278,11 +278,17 @@ async def api_fire_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     # Get active chats BEFORE marking them as 'left'
+    # Use role-based chats instead of chat_members table (more reliable)
     active_chat_ids = []
-    if user.telegram_id:
+    if user.telegram_id and user.role_id:
+        role_chats = get_chats_by_role(db, user.role_id)
+        active_chat_ids = [chat.chat_id for chat in role_chats if chat.chat_id]
+        print(f"DEBUG: Found {len(active_chat_ids)} chats from role {user.role_id} BEFORE firing")
+    elif user.telegram_id:
+        # Fallback: try to get from chat_members table
         user_chats = get_user_chats(db, user.telegram_id)
         active_chat_ids = [chat.chat_id for chat in user_chats if chat.is_active == 'active']
-        print(f"DEBUG: Found {len(active_chat_ids)} active chats BEFORE firing")
+        print(f"DEBUG: Found {len(active_chat_ids)} active chats from chat_members BEFORE firing")
     
     # Now fire the user (this will mark chats as 'left' in DB)
     user = fire_user(db, user_id)
@@ -658,11 +664,17 @@ async def api_delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     # Get active chats BEFORE deletion
+    # Use role-based chats instead of chat_members table (more reliable)
     active_chat_ids = []
-    if user.telegram_id:
+    if user.telegram_id and user.role_id:
+        role_chats = get_chats_by_role(db, user.role_id)
+        active_chat_ids = [chat.chat_id for chat in role_chats if chat.chat_id]
+        print(f"DEBUG: Found {len(active_chat_ids)} chats from role {user.role_id} for deletion")
+    elif user.telegram_id:
+        # Fallback: try to get from chat_members table
         user_chats = get_user_chats(db, user.telegram_id)
         active_chat_ids = [chat.chat_id for chat in user_chats if chat.is_active == 'active']
-        print(f"DEBUG: Found {len(active_chat_ids)} active chats for deletion")
+        print(f"DEBUG: Found {len(active_chat_ids)} active chats from chat_members for deletion")
     
     telegram_id = user.telegram_id
     
