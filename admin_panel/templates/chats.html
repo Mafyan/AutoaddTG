@@ -121,6 +121,46 @@
         </div>
     </div>
 </div>
+
+<!-- Upload Photo Modal -->
+<div class="modal fade" id="photoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Изменить фото чата</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="photoModalChatName" class="alert alert-info mb-3"></div>
+                <input type="hidden" id="photoChatId">
+                <input type="hidden" id="photoTelegramChatId">
+                
+                <div class="mb-3">
+                    <label class="form-label">Выберите фото</label>
+                    <input type="file" class="form-control" id="chatPhotoInput" accept="image/jpeg,image/png,image/jpg">
+                    <small class="text-muted">Только JPG/PNG файлы. Рекомендуемый размер: квадратное изображение</small>
+                </div>
+                
+                <div id="photoPreview" class="text-center mb-3" style="display: none;">
+                    <img id="photoPreviewImg" src="" alt="Preview" class="img-thumbnail" style="max-width: 300px; max-height: 300px;">
+                </div>
+                
+                <div id="uploadProgress" class="mb-3" style="display: none;">
+                    <div class="progress">
+                        <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <small id="uploadStatus" class="text-muted"></small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="uploadPhotoBtn" onclick="uploadChatPhoto()">
+                    <i class="bi bi-upload"></i> Загрузить и установить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -337,6 +377,10 @@
                                         <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal(${JSON.stringify(chat).replace(/'/g, "&apos;")})'>
                                             <i class="bi bi-pencil"></i>
                                         </button>
+                                        ${chat.chat_id ? 
+                                            `<button class="btn btn-sm btn-outline-info me-1" onclick="openPhotoModal(${chat.id}, ${chat.chat_id}, '${chat.chat_name}')" title="Изменить фото">
+                                                <i class="bi bi-image"></i>
+                                            </button>` : ''}
                                         <button class="btn btn-sm btn-outline-danger" onclick="deleteChat(${chat.id})">
                                             <i class="bi bi-trash"></i>
                                         </button>
@@ -440,11 +484,125 @@
         }
     }
     
+    // Photo Upload Functions
+    let photoModal;
+    
+    function openPhotoModal(chatId, telegramChatId, chatName) {
+        document.getElementById('photoChatId').value = chatId;
+        document.getElementById('photoTelegramChatId').value = telegramChatId;
+        document.getElementById('photoModalChatName').innerHTML = `<strong>Чат:</strong> ${chatName}<br><strong>Chat ID:</strong> <code>${telegramChatId}</code>`;
+        
+        // Reset file input and preview
+        document.getElementById('chatPhotoInput').value = '';
+        document.getElementById('photoPreview').style.display = 'none';
+        document.getElementById('uploadProgress').style.display = 'none';
+        
+        photoModal.show();
+    }
+    
+    // Preview photo before upload
+    document.addEventListener('DOMContentLoaded', function() {
+        const photoInput = document.getElementById('chatPhotoInput');
+        if (photoInput) {
+            photoInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        document.getElementById('photoPreviewImg').src = event.target.result;
+                        document.getElementById('photoPreview').style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+    });
+    
+    async function uploadChatPhoto() {
+        const chatId = document.getElementById('photoChatId').value;
+        const fileInput = document.getElementById('chatPhotoInput');
+        const uploadBtn = document.getElementById('uploadPhotoBtn');
+        
+        if (!fileInput.files || !fileInput.files[0]) {
+            alert('Пожалуйста, выберите файл');
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            alert('Пожалуйста, выберите изображение (JPG/PNG)');
+            return;
+        }
+        
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Файл слишком большой. Максимальный размер: 5MB');
+            return;
+        }
+        
+        try {
+            // Disable button
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Загрузка...';
+            
+            // Show progress
+            document.getElementById('uploadProgress').style.display = 'block';
+            document.getElementById('uploadProgressBar').style.width = '30%';
+            document.getElementById('uploadStatus').textContent = 'Загрузка файла...';
+            
+            // Create FormData
+            const formData = new FormData();
+            formData.append('photo', file);
+            
+            // Upload photo
+            const response = await fetch(`/api/chats/${chatId}/upload-photo`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${getToken()}`
+                },
+                body: formData
+            });
+            
+            document.getElementById('uploadProgressBar').style.width = '70%';
+            document.getElementById('uploadStatus').textContent = 'Устанавливаем фото в Telegram...';
+            
+            if (response.ok) {
+                const result = await response.json();
+                
+                document.getElementById('uploadProgressBar').style.width = '100%';
+                document.getElementById('uploadStatus').textContent = 'Готово!';
+                
+                showToast('Фото чата успешно обновлено!', 'success');
+                
+                setTimeout(() => {
+                    photoModal.hide();
+                    loadChats();
+                }, 1000);
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || 'Ошибка при загрузке фото');
+            }
+        } catch (error) {
+            console.error('Error uploading photo:', error);
+            showToast(error.message || 'Ошибка при загрузке фото чата', 'error');
+            
+            document.getElementById('uploadProgressBar').style.width = '0%';
+            document.getElementById('uploadStatus').textContent = '';
+        } finally {
+            // Re-enable button
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="bi bi-upload"></i> Загрузить и установить';
+        }
+    }
+    
     // Check authentication and initialize
     if (!getToken()) {
         window.location.href = '/';
     } else {
         chatModal = new bootstrap.Modal(document.getElementById('chatModal'));
+        photoModal = new bootstrap.Modal(document.getElementById('photoModal'));
         loadChats();
     }
 </script>

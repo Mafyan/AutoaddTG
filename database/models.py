@@ -62,6 +62,7 @@ class Chat(Base):
     chat_id = Column(BigInteger, unique=True, index=True, nullable=True)
     chat_name = Column(String(255), nullable=False)
     chat_link = Column(String(500), nullable=True)
+    chat_photo = Column(String(500), nullable=True)  # Path to chat photo file
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     

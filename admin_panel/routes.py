@@ -1,12 +1,15 @@
 """API routes for admin panel."""
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from telegram import Bot
 from telegram.error import TelegramError
+import os
+import uuid
+from pathlib import Path
 
 from database.database import get_db
 from database.crud import (
@@ -1005,4 +1008,75 @@ async def api_delete_chat(
     if delete_chat(db, chat_id):
         return {"status": "success", "message": "Chat deleted"}
     raise HTTPException(status_code=404, detail="Chat not found")
+
+@router.post("/api/chats/{chat_id}/upload-photo")
+async def api_upload_chat_photo(
+    chat_id: int,
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Upload and set chat photo."""
+    try:
+        # Get chat from database
+        chat = get_chat_by_id(db, chat_id)
+        if not chat or not chat.chat_id:
+            raise HTTPException(status_code=404, detail="Chat not found or no Telegram ID")
+        
+        # Validate file type
+        if not photo.content_type or not photo.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image (JPG/PNG)")
+        
+        # Create uploads directory if not exists
+        settings.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename
+        file_extension = os.path.splitext(photo.filename)[1] or '.jpg'
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = settings.UPLOADS_DIR / unique_filename
+        
+        # Save file
+        print(f"💾 Saving uploaded photo to: {file_path}")
+        with open(file_path, "wb") as buffer:
+            content = await photo.read()
+            buffer.write(content)
+        
+        print(f"✅ Photo saved, file size: {len(content)} bytes")
+        
+        # Set photo in Telegram
+        if settings.BOT_TOKEN:
+            from bot.chat_manager import ChatManager
+            chat_manager = ChatManager(settings.BOT_TOKEN)
+            
+            print(f"🤖 Setting photo in Telegram chat {chat.chat_id}")
+            success = await chat_manager.set_chat_photo(chat.chat_id, str(file_path))
+            
+            if success:
+                # Update database with photo path
+                relative_path = f"uploads/chat_photos/{unique_filename}"
+                update_chat(db, chat_id, chat_photo=relative_path)
+                
+                print(f"✅ Chat photo updated successfully")
+                return {
+                    "status": "success",
+                    "message": "Chat photo updated successfully",
+                    "photo_path": relative_path
+                }
+            else:
+                # Clean up file if failed
+                os.remove(file_path)
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to set chat photo in Telegram. Check bot permissions."
+                )
+        else:
+            raise HTTPException(status_code=500, detail="Bot token not configured")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error uploading chat photo: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to upload photo: {str(e)}")
 

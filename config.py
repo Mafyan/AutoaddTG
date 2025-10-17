@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent
     TEMPLATES_DIR: Path = BASE_DIR / "admin_panel" / "templates"
     STATIC_DIR: Path = BASE_DIR / "static"
+    UPLOADS_DIR: Path = BASE_DIR / "uploads" / "chat_photos"
     
     class Config:
         env_file = ".env"

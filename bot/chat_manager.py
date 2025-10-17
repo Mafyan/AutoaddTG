@@ -901,3 +901,69 @@ class ChatManager:
         except Exception as e:
             logger.error(f"Failed to sync chats to database: {e}")
             return {'error': str(e)}
+    
+    async def set_chat_photo(self, chat_id: int, photo_path: str) -> bool:
+        """
+        Set chat photo.
+        
+        Args:
+            chat_id: Telegram chat ID
+            photo_path: Path to photo file
+            
+        Returns:
+            True if photo was set successfully, False otherwise
+        """
+        try:
+            print(f"\n{'='*60}")
+            print(f"🖼️  SETTING CHAT PHOTO")
+            print(f"{'='*60}")
+            print(f"📊 Chat ID: {chat_id}")
+            print(f"📁 Photo Path: {photo_path}")
+            print(f"{'='*60}\n")
+            
+            # Check if bot is admin in the chat
+            try:
+                bot_member = await self.bot.get_chat_member(chat_id, self.bot.id)
+                print(f"🤖 Bot status in chat: {bot_member.status}")
+                
+                if bot_member.status not in ['administrator', 'creator']:
+                    print(f"❌ Bot is not admin in chat {chat_id}")
+                    logger.error(f"Bot is not admin in chat {chat_id}")
+                    return False
+                
+                # Check if bot has permission to change chat info
+                if bot_member.status == 'administrator':
+                    if not bot_member.can_change_info:
+                        print(f"❌ Bot doesn't have 'Change chat info' permission")
+                        logger.error(f"Bot doesn't have permission to change chat info in {chat_id}")
+                        return False
+                    print(f"✅ Bot has 'Change chat info' permission")
+                
+            except TelegramError as e:
+                print(f"❌ Error checking bot permissions: {e}")
+                logger.error(f"Error checking bot permissions in chat {chat_id}: {e}")
+                return False
+            
+            # Set the photo
+            print(f"📤 Uploading photo to chat...")
+            with open(photo_path, 'rb') as photo_file:
+                await self.bot.set_chat_photo(chat_id=chat_id, photo=photo_file)
+            
+            print(f"✅ Chat photo set successfully for chat {chat_id}")
+            logger.info(f"Successfully set chat photo for chat {chat_id}")
+            return True
+            
+        except FileNotFoundError:
+            print(f"❌ Photo file not found: {photo_path}")
+            logger.error(f"Photo file not found: {photo_path}")
+            return False
+        except TelegramError as e:
+            print(f"❌ Telegram error: {e}")
+            logger.error(f"Failed to set chat photo for chat {chat_id}: {e}")
+            return False
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            logger.error(f"Unexpected error setting chat photo for chat {chat_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False

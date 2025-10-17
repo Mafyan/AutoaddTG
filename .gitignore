@@ -57,3 +57,6 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# Uploads
+uploads/
+
