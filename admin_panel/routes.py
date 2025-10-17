@@ -51,6 +51,8 @@ class ChatUpdate(BaseModel):
     description: Optional[str] = None
 
 class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     role_id: Optional[int] = None
     status: Optional[str] = None
 

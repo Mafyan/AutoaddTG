@@ -73,6 +73,14 @@
                 <form id="editForm">
                     <input type="hidden" id="editUserId">
                     <div class="mb-3">
+                        <label class="form-label">Имя</label>
+                        <input type="text" class="form-control" id="editFirstName" placeholder="Введите имя">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Фамилия</label>
+                        <input type="text" class="form-control" id="editLastName" placeholder="Введите фамилию">
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Роль</label>
                         <select class="form-select" id="editRoleSelect">
                             <option value="">Без роли</option>
@@ -173,7 +181,7 @@
                                     <td>${statusBadge(user.status)}</td>
                                     <td>${new Date(user.created_at).toLocaleString('ru-RU')}</td>
                                     <td>
-                                        <button class="btn btn-sm btn-outline-primary me-1" onclick="openEditModal(${user.id}, '${user.role?.id || ''}', '${user.status}')">
+                                        <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal(${user.id}, "${user.first_name || ''}", "${user.last_name || ''}", "${user.role?.id || ''}", "${user.status}")'>
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                         ${user.status === 'approved' ? 
@@ -203,8 +211,10 @@
         }
     }
     
-    function openEditModal(userId, roleId, status) {
+    function openEditModal(userId, firstName, lastName, roleId, status) {
         document.getElementById('editUserId').value = userId;
+        document.getElementById('editFirstName').value = firstName || '';
+        document.getElementById('editLastName').value = lastName || '';
         document.getElementById('editRoleSelect').value = roleId;
         document.getElementById('editStatusSelect').value = status;
         editModal.show();
@@ -212,6 +222,8 @@
     
     async function saveUser() {
         const userId = document.getElementById('editUserId').value;
+        const firstName = document.getElementById('editFirstName').value.trim();
+        const lastName = document.getElementById('editLastName').value.trim();
         const roleId = document.getElementById('editRoleSelect').value;
         const status = document.getElementById('editStatusSelect').value;
         
@@ -219,6 +231,14 @@
             const data = {
                 status: status
             };
+            
+            if (firstName) {
+                data.first_name = firstName;
+            }
+            
+            if (lastName) {
+                data.last_name = lastName;
+            }
             
             if (roleId) {
                 data.role_id = parseInt(roleId);
