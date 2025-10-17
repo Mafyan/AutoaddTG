@@ -921,37 +921,43 @@ class ChatManager:
             print(f"📁 Photo Path: {photo_path}")
             print(f"{'='*60}\n")
             
-            # Check if bot is admin in the chat
-            try:
-                bot_member = await self.bot.get_chat_member(chat_id, self.bot.id)
-                print(f"🤖 Bot status in chat: {bot_member.status}")
+            # Initialize bot if needed
+            async with self.bot:
+                # Get bot info
+                bot_info = await self.bot.get_me()
+                print(f"🤖 Bot: @{bot_info.username} (ID: {bot_info.id})")
                 
-                if bot_member.status not in ['administrator', 'creator']:
-                    print(f"❌ Bot is not admin in chat {chat_id}")
-                    logger.error(f"Bot is not admin in chat {chat_id}")
+                # Check if bot is admin in the chat
+                try:
+                    bot_member = await self.bot.get_chat_member(chat_id, bot_info.id)
+                    print(f"🤖 Bot status in chat: {bot_member.status}")
+                    
+                    if bot_member.status not in ['administrator', 'creator']:
+                        print(f"❌ Bot is not admin in chat {chat_id}")
+                        logger.error(f"Bot is not admin in chat {chat_id}")
+                        return False
+                    
+                    # Check if bot has permission to change chat info
+                    if bot_member.status == 'administrator':
+                        if not bot_member.can_change_info:
+                            print(f"❌ Bot doesn't have 'Change chat info' permission")
+                            logger.error(f"Bot doesn't have permission to change chat info in {chat_id}")
+                            return False
+                        print(f"✅ Bot has 'Change chat info' permission")
+                    
+                except TelegramError as e:
+                    print(f"❌ Error checking bot permissions: {e}")
+                    logger.error(f"Error checking bot permissions in chat {chat_id}: {e}")
                     return False
                 
-                # Check if bot has permission to change chat info
-                if bot_member.status == 'administrator':
-                    if not bot_member.can_change_info:
-                        print(f"❌ Bot doesn't have 'Change chat info' permission")
-                        logger.error(f"Bot doesn't have permission to change chat info in {chat_id}")
-                        return False
-                    print(f"✅ Bot has 'Change chat info' permission")
+                # Set the photo
+                print(f"📤 Uploading photo to chat...")
+                with open(photo_path, 'rb') as photo_file:
+                    await self.bot.set_chat_photo(chat_id=chat_id, photo=photo_file)
                 
-            except TelegramError as e:
-                print(f"❌ Error checking bot permissions: {e}")
-                logger.error(f"Error checking bot permissions in chat {chat_id}: {e}")
-                return False
-            
-            # Set the photo
-            print(f"📤 Uploading photo to chat...")
-            with open(photo_path, 'rb') as photo_file:
-                await self.bot.set_chat_photo(chat_id=chat_id, photo=photo_file)
-            
-            print(f"✅ Chat photo set successfully for chat {chat_id}")
-            logger.info(f"Successfully set chat photo for chat {chat_id}")
-            return True
+                print(f"✅ Chat photo set successfully for chat {chat_id}")
+                logger.info(f"Successfully set chat photo for chat {chat_id}")
+                return True
             
         except FileNotFoundError:
             print(f"❌ Photo file not found: {photo_path}")
