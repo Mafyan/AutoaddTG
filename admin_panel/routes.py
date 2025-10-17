@@ -290,9 +290,146 @@ async def api_update_user(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Update user."""
+    # Get user BEFORE update to check if role changed
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    old_role_id = user.role_id
+    new_role_id = user_update.role_id
+    
+    # Check if role is being changed
+    role_changed = new_role_id is not None and old_role_id != new_role_id
+    
+    # If role is changing, remove user from old role chats first
+    if role_changed and user.telegram_id and old_role_id:
+        print(f"\n{'='*60}")
+        print(f"🔄 CHANGING ROLE FOR USER {user_id}")
+        print(f"{'='*60}")
+        print(f"👤 User: {user.first_name} {user.last_name or ''}")
+        print(f"📱 Telegram ID: {user.telegram_id}")
+        print(f"👔 Old Role ID: {old_role_id} → New Role ID: {new_role_id}")
+        print(f"{'='*60}\n")
+        
+        try:
+            # Get chats from OLD role
+            old_role_chats = get_chats_by_role(db, old_role_id)
+            old_chat_ids = [chat.chat_id for chat in old_role_chats if chat.chat_id]
+            
+            if old_chat_ids and settings.BOT_TOKEN:
+                print(f"🚀 Removing user from {len(old_chat_ids)} chats of old role...")
+                
+                from bot.chat_manager import ChatManager
+                chat_manager = ChatManager(settings.BOT_TOKEN)
+                
+                # Remove user from all old role chats
+                removal_results = await chat_manager.remove_user_from_all_chats(user.telegram_id, old_chat_ids)
+                
+                print(f"\n📊 REMOVAL RESULTS:")
+                for chat_id, result in removal_results.items():
+                    status = "✅ SUCCESS" if result['success'] else "❌ FAILED"
+                    error_msg = f" - {result['error']}" if result['error'] else ""
+                    print(f"  Chat {chat_id}: {status}{error_msg}")
+                print()
+                
+                success_count = sum(1 for r in removal_results.values() if r['success'])
+                print(f"✅ Removed from {success_count}/{len(old_chat_ids)} old role chats\n")
+            else:
+                print(f"⚠️  No chats found for old role {old_role_id}\n")
+                
+        except Exception as e:
+            print(f"❌ ERROR removing from old role chats: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Update user with new data
     user = update_user(db, user_id, **user_update.model_dump(exclude_unset=True))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    # If role was changed and user is approved, add to new role chats
+    if role_changed and user.telegram_id and new_role_id and user.status == 'approved':
+        try:
+            print(f"➕ Adding user to new role chats...")
+            
+            # Add user to new role chats in database
+            success = add_user_to_role_chats(db, user_id)
+            print(f"{'✅' if success else '❌'} Database update: {success}\n")
+            
+            # Ensure user is not banned from new chats
+            if settings.BOT_TOKEN:
+                from bot.chat_manager import ChatManager
+                chat_manager = ChatManager(settings.BOT_TOKEN)
+                
+                # Get all chats for new role
+                new_role_chats = get_chats_by_role(db, new_role_id)
+                print(f"📊 Found {len(new_role_chats)} chats for new role {new_role_id}")
+                
+                # Unban user from each Telegram chat (if they were banned)
+                print(f"🚀 Ensuring user is not banned in new role chats...\n")
+                for idx, chat in enumerate(new_role_chats, 1):
+                    if chat.chat_id:
+                        try:
+                            print(f"  [{idx}/{len(new_role_chats)}] Chat: {chat.chat_name} (ID: {chat.chat_id})")
+                            success = await chat_manager.ensure_user_not_banned(chat.chat_id, user.telegram_id)
+                            if success:
+                                print(f"  ✅ User is not banned\n")
+                            else:
+                                print(f"  ⚠️  Could not verify ban status\n")
+                            
+                            # Rate limiting
+                            if idx < len(new_role_chats):
+                                import asyncio
+                                await asyncio.sleep(0.5)
+                                
+                        except Exception as e:
+                            print(f"  ❌ Error: {e}\n")
+                    else:
+                        print(f"  [{idx}/{len(new_role_chats)}] Chat: {chat.chat_name} - ⚠️  No Telegram ID\n")
+                
+                # Send notification with new temporary invite links
+                print(f"📨 Creating temporary invite links (12 hours) for new role...")
+                temp_links = await chat_manager.get_role_temporary_invite_links(new_role_id, hours=12)
+                
+                # Format message
+                message = (
+                    f"🔄 Ваша роль была изменена!\n\n"
+                    f"👤 Новая роль: {user.role.name}\n\n"
+                    f"🔗 Ваши персональные ссылки на чаты:\n"
+                    f"⏰ Срок действия: 12 часов\n"
+                    f"👤 Использований: 1 раз\n\n"
+                )
+                
+                # Add links
+                for idx, link_info in enumerate(temp_links, 1):
+                    if link_info['success'] and link_info['invite_link']:
+                        message += f"{idx}. {link_info['chat_name']}\n{link_info['invite_link']}\n\n"
+                    else:
+                        message += f"{idx}. {link_info['chat_name']} - ⚠️ Ошибка создания ссылки\n\n"
+                
+                message += (
+                    f"⚠️ ВАЖНО:\n"
+                    f"• Вы были удалены из чатов старой роли\n"
+                    f"• Ссылки действуют только 12 часов\n"
+                    f"• Каждая ссылка одноразовая (1 использование)\n"
+                    f"• Присоединяйтесь к чатам как можно скорее!\n\n"
+                    f"Если ссылка истекла, обратитесь к администратору."
+                )
+                
+                try:
+                    bot = Bot(token=settings.BOT_TOKEN)
+                    await bot.send_message(chat_id=user.telegram_id, text=message, disable_web_page_preview=True)
+                    print(f"✅ Temporary links sent to user {user.telegram_id}\n")
+                except TelegramError as e:
+                    print(f"❌ Failed to send notification: {e}\n")
+                
+                print(f"{'='*60}\n")
+                
+        except Exception as e:
+            print(f"❌ ERROR adding to new role chats: {e}")
+            import traceback
+            traceback.print_exc()
+    
     return {"status": "success", "message": "User updated"}
 
 @router.post("/api/users/{user_id}/fire")
