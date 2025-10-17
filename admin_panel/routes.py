@@ -210,20 +210,50 @@ async def api_approve_request(
             import traceback
             traceback.print_exc()
     
-    # Send notification to user via Telegram
+    # Send notification to user via Telegram with temporary invite links
     if user.telegram_id and settings.BOT_TOKEN:
         try:
-            bot = Bot(token=settings.BOT_TOKEN)
-            chats = get_chats_by_role(db, role_id)
+            from bot.chat_manager import ChatManager
+            chat_manager = ChatManager(settings.BOT_TOKEN)
+            
+            # Get temporary invite links (12 hours, single use)
+            print(f"📨 Creating temporary invite links (12 hours) for user {user_id}...")
+            temp_links = await chat_manager.get_role_temporary_invite_links(role_id, hours=12)
+            
+            # Format message with temporary links
             message = (
                 f"✅ Ваша заявка одобрена!\n\n"
                 f"👤 Роль: {user.role.name}\n\n"
-                f"{format_chat_links(chats)}\n"
-                f"Используйте команду /mychats чтобы получить ссылки снова."
+                f"🔗 Ваши персональные ссылки на чаты:\n"
+                f"⏰ Срок действия: 12 часов\n"
+                f"👤 Использований: 1 раз\n\n"
             )
-            await bot.send_message(chat_id=user.telegram_id, text=message)
+            
+            # Add links
+            for idx, link_info in enumerate(temp_links, 1):
+                if link_info['success'] and link_info['invite_link']:
+                    message += f"{idx}. {link_info['chat_name']}\n{link_info['invite_link']}\n\n"
+                else:
+                    message += f"{idx}. {link_info['chat_name']} - ⚠️ Ошибка создания ссылки\n\n"
+            
+            message += (
+                f"⚠️ ВАЖНО:\n"
+                f"• Ссылки действуют только 12 часов\n"
+                f"• Каждая ссылка одноразовая (1 использование)\n"
+                f"• Присоединяйтесь к чатам как можно скорее!\n\n"
+                f"Если ссылка истекла, обратитесь к администратору."
+            )
+            
+            bot = Bot(token=settings.BOT_TOKEN)
+            await bot.send_message(chat_id=user.telegram_id, text=message, disable_web_page_preview=True)
+            print(f"✅ Temporary links sent to user {user.telegram_id}")
+            
         except TelegramError as e:
             print(f"Failed to send notification: {e}")
+        except Exception as e:
+            print(f"Error creating temporary links: {e}")
+            import traceback
+            traceback.print_exc()
     
     return {"status": "success", "message": "User approved"}
 

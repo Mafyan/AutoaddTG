@@ -611,7 +611,7 @@ class ChatManager:
     
     async def get_chat_invite_link(self, chat_id: int) -> Optional[str]:
         """
-        Get or create invite link for a chat.
+        Get permanent invite link for a chat.
         
         Args:
             chat_id: Telegram chat ID
@@ -621,11 +621,108 @@ class ChatManager:
         """
         try:
             invite_link = await self.bot.export_chat_invite_link(chat_id)
-            logger.info(f"Got invite link for chat {chat_id}")
+            logger.info(f"Got permanent invite link for chat {chat_id}")
             return invite_link
         except TelegramError as e:
             logger.error(f"Failed to get invite link for chat {chat_id}: {e}")
             return None
+    
+    async def create_temporary_invite_link(self, chat_id: int, hours: int = 12) -> Optional[str]:
+        """
+        Create temporary invite link that expires after specified hours.
+        
+        Args:
+            chat_id: Telegram chat ID
+            hours: Hours until link expires (default: 12)
+            
+        Returns:
+            Temporary invite link or None if failed
+        """
+        try:
+            from datetime import datetime, timedelta
+            
+            # Calculate expiration time
+            expire_date = datetime.now() + timedelta(hours=hours)
+            expire_timestamp = int(expire_date.timestamp())
+            
+            # Create temporary invite link
+            invite_link = await self.bot.create_chat_invite_link(
+                chat_id=chat_id,
+                expire_date=expire_timestamp,
+                member_limit=1  # Одноразовая ссылка для одного пользователя
+            )
+            
+            logger.info(f"Created temporary invite link for chat {chat_id}, expires in {hours} hours")
+            print(f"✅ Temporary link created for chat {chat_id}: expires in {hours} hours (1 use)")
+            
+            return invite_link.invite_link
+            
+        except TelegramError as e:
+            logger.error(f"Failed to create temporary invite link for chat {chat_id}: {e}")
+            print(f"❌ Error creating temporary link for chat {chat_id}: {e}")
+            return None
+    
+    async def get_role_temporary_invite_links(self, role_id: int, hours: int = 12) -> List[dict]:
+        """
+        Get temporary invite links (12 hours) for all chats assigned to a role.
+        
+        Args:
+            role_id: Role ID
+            hours: Hours until links expire (default: 12)
+            
+        Returns:
+            List of chat info with temporary invite links
+        """
+        db = SessionLocal()
+        try:
+            chats = get_chats_by_role(db, role_id)
+            results = []
+            
+            for chat in chats:
+                if chat.chat_id:
+                    try:
+                        # Create temporary invite link (12 hours, single use)
+                        invite_link = await self.create_temporary_invite_link(chat.chat_id, hours)
+                        
+                        if invite_link:
+                            results.append({
+                                "chat_name": chat.chat_name,
+                                "chat_id": chat.chat_id,
+                                "invite_link": invite_link,
+                                "expires_hours": hours,
+                                "success": True
+                            })
+                        else:
+                            results.append({
+                                "chat_name": chat.chat_name,
+                                "chat_id": chat.chat_id,
+                                "invite_link": None,
+                                "success": False,
+                                "error": "Failed to create temporary link"
+                            })
+                            
+                    except TelegramError as e:
+                        logger.error(f"Failed to create temporary invite link for chat {chat.chat_id}: {e}")
+                        results.append({
+                            "chat_name": chat.chat_name,
+                            "chat_id": chat.chat_id,
+                            "invite_link": None,
+                            "success": False,
+                            "error": str(e)
+                        })
+                else:
+                    results.append({
+                        "chat_name": chat.chat_name,
+                        "chat_id": None,
+                        "invite_link": None,
+                        "success": False,
+                        "error": "Chat ID not set"
+                    })
+            
+            return results
+            
+        finally:
+            db.close()
     
     async def get_bot_chats(self) -> List[dict]:
         """

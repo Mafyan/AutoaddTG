@@ -121,7 +121,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /mychats command."""
+    """Handle /mychats command - creates new temporary invite links."""
     user = update.effective_user
     db = SessionLocal()
     
@@ -153,9 +153,42 @@ async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_remove_keyboard()
             )
         else:
-            chats = get_chats_by_role(db, existing_user.role_id)
-            message = format_chat_links(chats)
-            await update.message.reply_text(message, reply_markup=get_remove_keyboard())
+            # Create new temporary invite links (12 hours, single use)
+            from bot.chat_manager import ChatManager
+            chat_manager = ChatManager(settings.BOT_TOKEN)
+            
+            await update.message.reply_text(
+                "🔄 Создаю новые временные ссылки...",
+                reply_markup=get_remove_keyboard()
+            )
+            
+            temp_links = await chat_manager.get_role_temporary_invite_links(existing_user.role_id, hours=12)
+            
+            message = (
+                f"🔗 Ваши персональные ссылки на чаты:\n"
+                f"⏰ Срок действия: 12 часов\n"
+                f"👤 Использований: 1 раз\n\n"
+            )
+            
+            # Add links
+            for idx, link_info in enumerate(temp_links, 1):
+                if link_info['success'] and link_info['invite_link']:
+                    message += f"{idx}. {link_info['chat_name']}\n{link_info['invite_link']}\n\n"
+                else:
+                    message += f"{idx}. {link_info['chat_name']} - ⚠️ Ошибка создания ссылки\n\n"
+            
+            message += (
+                f"⚠️ ВАЖНО:\n"
+                f"• Ссылки действуют только 12 часов\n"
+                f"• Каждая ссылка одноразовая (1 использование)\n"
+                f"• Присоединяйтесь к чатам как можно скорее!"
+            )
+            
+            await update.message.reply_text(
+                message,
+                reply_markup=get_remove_keyboard(),
+                disable_web_page_preview=True
+            )
     
     finally:
         db.close()
