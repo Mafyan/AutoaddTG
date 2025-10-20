@@ -115,6 +115,19 @@
 <script>
     let editModal;
     let roles = [];
+    let currentAdmin = null;
+    let isMainAdmin = false;
+    
+    async function loadCurrentAdmin() {
+        try {
+            const response = await apiRequest('/api/current-admin');
+            currentAdmin = await response.json();
+            isMainAdmin = currentAdmin.is_main_admin;
+            console.log('Current admin:', currentAdmin.username, 'Is main admin:', isMainAdmin);
+        } catch (error) {
+            console.error('Error loading current admin:', error);
+        }
+    }
     
     async function loadRoles() {
         try {
@@ -194,14 +207,19 @@
                                             `<button class="btn btn-sm btn-outline-info me-1" onclick="viewUserChats(${user.id})">
                                                 <i class="bi bi-chat-dots"></i> Чаты
                                             </button>
-                                            <button class="btn btn-sm btn-outline-warning" onclick="fireUser(${user.id})">
+                                            <button class="btn btn-sm btn-outline-warning me-1" onclick="fireUser(${user.id})">
                                                 <i class="bi bi-person-x"></i> Уволить
                                             </button>` : 
                                             user.status === 'fired' ?
-                                            `<button class="btn btn-sm btn-outline-success" onclick="rehireUser(${user.id})">
+                                            `<button class="btn btn-sm btn-outline-success me-1" onclick="rehireUser(${user.id})">
                                                 <i class="bi bi-person-check"></i> Восстановить
                                             </button>` : 
-                                            `<span class="text-muted small">${user.status}</span>`
+                                            `<span class="text-muted small me-1">${user.status}</span>`
+                                        }
+                                        ${isMainAdmin ? 
+                                            `<button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${user.id})" title="Только для главного администратора">
+                                                <i class="bi bi-trash"></i> Удалить
+                                            </button>` : ''
                                         }
                                     </td>
                                 </tr>
@@ -484,7 +502,12 @@
     }
     
     async function deleteUser(userId) {
-        if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) {
+        if (!isMainAdmin) {
+            alert('Только главный администратор (admin) может удалять пользователей');
+            return;
+        }
+        
+        if (!confirm('⚠️ ВНИМАНИЕ!\n\nВы уверены, что хотите ПОЛНОСТЬЮ УДАЛИТЬ этого пользователя?\n\nПользователь будет:\n- Удален из базы данных\n- Удален из всех Telegram чатов\n\nЭто действие нельзя отменить!')) {
             return;
         }
         
@@ -495,11 +518,16 @@
             
             if (response.ok) {
                 loadUsers();
-                alert('Пользователь удален');
+                alert('✅ Пользователь успешно удален из системы и всех чатов');
+            } else if (response.status === 403) {
+                alert('❌ Доступ запрещен. Только главный администратор может удалять пользователей.');
+            } else {
+                const error = await response.json();
+                alert('❌ Ошибка при удалении: ' + (error.detail || 'Неизвестная ошибка'));
             }
         } catch (error) {
             console.error('Error deleting user:', error);
-            alert('Ошибка при удалении пользователя');
+            alert('❌ Ошибка при удалении пользователя');
         }
     }
     
@@ -508,8 +536,10 @@
         window.location.href = '/';
     } else {
         editModal = new bootstrap.Modal(document.getElementById('editModal'));
-        loadRoles();
-        loadUsers();
+        loadCurrentAdmin().then(() => {
+            loadRoles();
+            loadUsers();
+        });
     }
 </script>
 {% endblock %}

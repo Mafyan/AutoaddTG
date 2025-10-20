@@ -844,7 +844,14 @@ async def api_delete_user(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
-    """Delete user completely (including from Telegram chats)."""
+    """Delete user completely (including from Telegram chats). Only 'admin' account can delete users."""
+    # Check if current admin is the main admin account
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Only the main admin account can delete users"
+        )
+    
     # ✅ Get user and active chats BEFORE deleting
     user = get_user_by_id(db, user_id)
     if not user:
@@ -1096,6 +1103,18 @@ async def api_upload_chat_photo(
         raise HTTPException(status_code=500, detail=f"Failed to upload photo: {str(e)}")
 
 # ==================== ADMIN MANAGEMENT API ====================
+
+@router.get("/api/current-admin")
+async def api_get_current_admin(
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get current admin information."""
+    return {
+        "id": current_admin.id,
+        "username": current_admin.username,
+        "telegram_id": current_admin.telegram_id,
+        "is_main_admin": current_admin.username == "admin"
+    }
 
 @router.get("/api/admins")
 async def api_get_admins(
