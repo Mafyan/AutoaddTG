@@ -21,6 +21,12 @@ app.add_middleware(
 if settings.STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(settings.STATIC_DIR)), name="static")
 
+# Mount uploads directory for chat photos
+uploads_dir = settings.BASE_DIR / "uploads"
+if not uploads_dir.exists():
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+
 # Include router
 app.include_router(router)
 
