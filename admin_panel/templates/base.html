@@ -15,6 +15,49 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
         }
         
+        /* Mobile Menu Toggle Button */
+        .mobile-menu-toggle {
+            display: none;
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            z-index: 1100;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            width: 45px;
+            height: 45px;
+            border-radius: 10px;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .mobile-menu-toggle:hover {
+            transform: scale(1.05);
+        }
+        
+        .mobile-menu-toggle:active {
+            transform: scale(0.95);
+        }
+        
+        /* Sidebar Overlay for mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1040;
+        }
+        
+        .sidebar-overlay.active {
+            display: block;
+        }
+        
         .sidebar {
             position: fixed;
             top: 0;
@@ -25,6 +68,8 @@
             color: white;
             padding: 20px;
             overflow-y: auto;
+            z-index: 1050;
+            transition: transform 0.3s ease-in-out;
         }
         
         .sidebar .brand {
@@ -155,10 +200,117 @@
         .toast-info {
             border-left: 4px solid #17a2b8;
         }
+        
+        /* ==================== MOBILE RESPONSIVE STYLES ==================== */
+        @media (max-width: 992px) {
+            .mobile-menu-toggle {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+                padding: 80px 15px 15px 15px;
+            }
+            
+            .stat-card {
+                margin-bottom: 15px;
+            }
+            
+            .table-container {
+                padding: 15px;
+                overflow-x: auto;
+            }
+            
+            /* Make tables scrollable on mobile */
+            .table-responsive {
+                display: block;
+                width: 100%;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            .table-responsive table {
+                min-width: 600px;
+            }
+            
+            /* Smaller buttons on mobile */
+            .btn-sm {
+                padding: 0.2rem 0.4rem;
+                font-size: 0.8rem;
+            }
+            
+            /* Stack action buttons on mobile */
+            .btn-group {
+                flex-wrap: wrap;
+            }
+            
+            /* Toast notifications positioning */
+            .toast-container {
+                top: 70px;
+                right: 10px;
+                left: 10px;
+            }
+            
+            .toast {
+                min-width: 100%;
+            }
+            
+            /* Modal adjustments */
+            .modal-dialog {
+                margin: 10px;
+            }
+            
+            /* Form controls */
+            .form-control, .form-select {
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .main-content {
+                padding: 70px 10px 10px 10px;
+            }
+            
+            .stat-card h3 {
+                font-size: 1.5rem;
+            }
+            
+            .btn {
+                font-size: 0.875rem;
+            }
+            
+            /* Hide some table columns on very small screens */
+            .table-mobile-hide {
+                display: none;
+            }
+            
+            /* Card layout for table rows on small screens */
+            .table-responsive table {
+                min-width: 100%;
+            }
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" onclick="toggleMobileMenu()">
+        <i class="bi bi-list"></i>
+    </button>
+    
+    <!-- Sidebar Overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileMenu()"></div>
+    
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
     
@@ -274,6 +426,52 @@
                 throw error;
             }
         }
+        
+        // Mobile Menu Toggle
+        function toggleMobileMenu() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const toggle = document.getElementById('mobileMenuToggle');
+            
+            if (sidebar && overlay) {
+                sidebar.classList.toggle('active');
+                overlay.classList.toggle('active');
+                
+                // Change icon
+                const icon = toggle.querySelector('i');
+                if (sidebar.classList.contains('active')) {
+                    icon.className = 'bi bi-x-lg';
+                } else {
+                    icon.className = 'bi bi-list';
+                }
+            }
+        }
+        
+        // Close mobile menu when clicking on nav link
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar) {
+                const navLinks = sidebar.querySelectorAll('.nav-link');
+                navLinks.forEach(link => {
+                    link.addEventListener('click', function() {
+                        // Only close on mobile
+                        if (window.innerWidth <= 992) {
+                            toggleMobileMenu();
+                        }
+                    });
+                });
+            }
+        });
+        
+        // Close menu on window resize if going to desktop
+        window.addEventListener('resize', function() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (window.innerWidth > 992 && sidebar && overlay) {
+                sidebar.classList.remove('active');
+                overlay.classList.remove('active');
+            }
+        });
     </script>
     {% block extra_js %}{% endblock %}
 </body>
