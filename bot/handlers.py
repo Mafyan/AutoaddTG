@@ -249,166 +249,152 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
-async def handle_text_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle phone number sent as text."""
+async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Universal handler for all text messages based on user state."""
     user = update.effective_user
-    phone_text = update.message.text
+    state = context.user_data.get('state')
+    text = update.message.text.strip()
     
-    # Check if user is in phone input state
-    if context.user_data.get('state') != AWAITING_PHONE:
-        return
-    
-    # Validate phone
-    if not validate_phone(phone_text):
-        await update.message.reply_text(
-            "❌ Неверный формат номера телефона.\n\n"
-            "Пожалуйста, отправьте корректный номер телефона или "
-            "воспользуйтесь кнопкой для автоматической отправки.",
-            reply_markup=get_phone_keyboard()
-        )
-        return
-    
-    phone = normalize_phone(phone_text)
-    db = SessionLocal()
-    
-    try:
-        # Check if phone already exists
-        existing_user = get_user_by_phone(db, phone)
+    # Handle AWAITING_PHONE state
+    if state == AWAITING_PHONE:
+        # Validate phone
+        if not validate_phone(text):
+            await update.message.reply_text(
+                "❌ Неверный формат номера телефона.\n\n"
+                "Пожалуйста, отправьте корректный номер телефона или "
+                "воспользуйтесь кнопкой для автоматической отправки.",
+                reply_markup=get_phone_keyboard()
+            )
+            return
         
-        if existing_user:
-            if existing_user.telegram_id == user.id:
-                await update.message.reply_text(
-                    "ℹ️ Вы уже зарегистрированы с этим номером телефона.",
-                    reply_markup=get_remove_keyboard()
-                )
-                context.user_data.pop('state', None)
+        phone = normalize_phone(text)
+        db = SessionLocal()
+        
+        try:
+            # Check if phone already exists
+            existing_user = get_user_by_phone(db, phone)
+            
+            if existing_user:
+                if existing_user.telegram_id == user.id:
+                    await update.message.reply_text(
+                        "ℹ️ Вы уже зарегистрированы с этим номером телефона.",
+                        reply_markup=get_remove_keyboard()
+                    )
+                    context.user_data.pop('state', None)
+                else:
+                    # Update telegram_id if phone exists but with different telegram_id
+                    existing_user.telegram_id = user.id
+                    existing_user.username = user.username
+                    db.commit()
+                    
+                    await update.message.reply_text(
+                        "✅ Ваш Telegram ID обновлен.\n\n"
+                        "Используйте команду /status для проверки статуса.",
+                        reply_markup=get_remove_keyboard()
+                    )
+                    context.user_data.pop('state', None)
             else:
-                # Update telegram_id if phone exists but with different telegram_id
-                existing_user.telegram_id = user.id
-                existing_user.username = user.username
-                db.commit()
+                # Save phone and request name
+                context.user_data['phone'] = phone
+                context.user_data['state'] = AWAITING_NAME
                 
                 await update.message.reply_text(
-                    "✅ Ваш Telegram ID обновлен.\n\n"
-                    "Используйте команду /status для проверки статуса.",
+                    "✅ Спасибо!\n\n"
+                    "👤 Теперь введите ваше Имя и Фамилию:\n"
+                    "(например: Иван Иванов)",
                     reply_markup=get_remove_keyboard()
                 )
-                context.user_data.pop('state', None)
-        else:
-            # Save phone and request name
-            context.user_data['phone'] = phone
-            context.user_data['state'] = AWAITING_NAME
-            
+        finally:
+            db.close()
+        return
+    
+    # Handle AWAITING_NAME state
+    elif state == AWAITING_NAME:
+        # Basic validation - check if name contains at least 2 words
+        name_parts = text.split()
+        if len(name_parts) < 2:
             await update.message.reply_text(
-                "✅ Спасибо!\n\n"
-                "👤 Теперь введите ваше Имя и Фамилию:\n"
-                "(например: Иван Иванов)",
+                "❌ Пожалуйста, введите Имя и Фамилию через пробел.\n\n"
+                "Например: Иван Иванов",
                 reply_markup=get_remove_keyboard()
             )
-    
-    finally:
-        db.close()
-
-async def handle_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle name and surname input."""
-    user = update.effective_user
-    
-    # Check if user is in name input state
-    if context.user_data.get('state') != AWAITING_NAME:
-        return
-    
-    name_text = update.message.text.strip()
-    
-    # Basic validation - check if name contains at least 2 words
-    name_parts = name_text.split()
-    if len(name_parts) < 2:
-        await update.message.reply_text(
-            "❌ Пожалуйста, введите Имя и Фамилию через пробел.\n\n"
-            "Например: Иван Иванов",
-            reply_markup=get_remove_keyboard()
-        )
-        return
-    
-    # Save first name and last name
-    first_name = name_parts[0]
-    last_name = ' '.join(name_parts[1:])  # In case there are multiple parts in last name
-    
-    context.user_data['first_name'] = first_name
-    context.user_data['last_name'] = last_name
-    context.user_data['state'] = AWAITING_POSITION
-    
-    await update.message.reply_text(
-        f"✅ Спасибо, {first_name} {last_name}!\n\n"
-        "💼 Теперь введите вашу должность:\n"
-        "(например: Менеджер по продажам)",
-        reply_markup=get_remove_keyboard()
-    )
-
-async def handle_position(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle position input and create user."""
-    user = update.effective_user
-    
-    # Check if user is in position input state
-    if context.user_data.get('state') != AWAITING_POSITION:
-        return
-    
-    position_text = update.message.text.strip()
-    
-    # Basic validation
-    if len(position_text) < 2:
-        await update.message.reply_text(
-            "❌ Пожалуйста, введите вашу должность.\n\n"
-            "Например: Менеджер по продажам",
-            reply_markup=get_remove_keyboard()
-        )
-        return
-    
-    # Get saved data
-    phone = context.user_data.get('phone')
-    first_name = context.user_data.get('first_name')
-    last_name = context.user_data.get('last_name')
-    
-    if not phone or not first_name or not last_name:
-        await update.message.reply_text(
-            "❌ Произошла ошибка. Пожалуйста, начните регистрацию заново с команды /start",
-            reply_markup=get_remove_keyboard()
-        )
-        context.user_data.clear()
-        return
-    
-    db = SessionLocal()
-    
-    try:
-        # Create new user with full information
-        create_user(
-            db,
-            phone_number=phone,
-            telegram_id=user.id,
-            username=user.username,
-            first_name=first_name,
-            last_name=last_name,
-            position=position_text
-        )
+            return
+        
+        # Save first name and last name
+        first_name = name_parts[0]
+        last_name = ' '.join(name_parts[1:])  # In case there are multiple parts in last name
+        
+        context.user_data['first_name'] = first_name
+        context.user_data['last_name'] = last_name
+        context.user_data['state'] = AWAITING_POSITION
         
         await update.message.reply_text(
-            "✅ Ваша заявка успешно отправлена!\n\n"
-            f"📋 Ваши данные:\n"
-            f"👤 Имя: {first_name} {last_name}\n"
-            f"💼 Должность: {position_text}\n"
-            f"📱 Телефон: {phone}\n\n"
-            "Администратор рассмотрит заявку в ближайшее время.\n"
-            "Вы получите уведомление, когда заявка будет обработана.\n\n"
-            "Используйте команду /status для проверки статуса заявки.",
+            f"✅ Спасибо, {first_name} {last_name}!\n\n"
+            "💼 Теперь введите вашу должность:\n"
+            "(например: Менеджер по продажам)",
             reply_markup=get_remove_keyboard()
         )
-        
-        logger.info(f"New user request: {first_name} {last_name} ({position_text}) - {phone} (Telegram ID: {user.id})")
-        
-        # Clear user data
-        context.user_data.clear()
+        return
     
-    finally:
-        db.close()
+    # Handle AWAITING_POSITION state
+    elif state == AWAITING_POSITION:
+        position_text = text
+        
+        # Basic validation
+        if len(position_text) < 2:
+            await update.message.reply_text(
+                "❌ Пожалуйста, введите вашу должность.\n\n"
+                "Например: Менеджер по продажам",
+                reply_markup=get_remove_keyboard()
+            )
+            return
+        
+        # Get saved data
+        phone = context.user_data.get('phone')
+        first_name = context.user_data.get('first_name')
+        last_name = context.user_data.get('last_name')
+        
+        if not phone or not first_name or not last_name:
+            await update.message.reply_text(
+                "❌ Произошла ошибка. Пожалуйста, начните регистрацию заново с команды /start",
+                reply_markup=get_remove_keyboard()
+            )
+            context.user_data.clear()
+            return
+        
+        db = SessionLocal()
+        
+        try:
+            # Create new user with full information
+            create_user(
+                db,
+                phone_number=phone,
+                telegram_id=user.id,
+                username=user.username,
+                first_name=first_name,
+                last_name=last_name,
+                position=position_text
+            )
+            
+            await update.message.reply_text(
+                "✅ Ваша заявка успешно отправлена!\n\n"
+                f"📋 Ваши данные:\n"
+                f"👤 Имя: {first_name} {last_name}\n"
+                f"💼 Должность: {position_text}\n"
+                f"📱 Телефон: {phone}\n\n"
+                "Администратор рассмотрит заявку в ближайшее время.\n"
+                "Вы получите уведомление, когда заявка будет обработана.\n\n"
+                "Используйте команду /status для проверки статуса заявки.",
+                reply_markup=get_remove_keyboard()
+            )
+            
+            logger.info(f"New user request: {first_name} {last_name} ({position_text}) - {phone} (Telegram ID: {user.id})")
+            
+            # Clear user data
+            context.user_data.clear()
+        finally:
+            db.close()
+        return
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle errors."""
