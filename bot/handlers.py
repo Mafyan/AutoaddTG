@@ -123,7 +123,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /mychats command - creates new temporary invite links."""
+    """Handle /mychats command - creates new temporary invite links. Limited to once per 48 hours."""
+    from datetime import datetime, timedelta
     user = update.effective_user
     db = SessionLocal()
     
@@ -155,6 +156,37 @@ async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_remove_keyboard()
             )
         else:
+            # Check if user can request links (48 hours cooldown)
+            now = datetime.utcnow()
+            cooldown_hours = 48
+            
+            if existing_user.last_links_request:
+                time_since_last_request = now - existing_user.last_links_request
+                hours_passed = time_since_last_request.total_seconds() / 3600
+                
+                if hours_passed < cooldown_hours:
+                    # Calculate remaining time
+                    hours_remaining = cooldown_hours - hours_passed
+                    days = int(hours_remaining // 24)
+                    hours = int(hours_remaining % 24)
+                    minutes = int((hours_remaining % 1) * 60)
+                    
+                    time_str = ""
+                    if days > 0:
+                        time_str += f"{days} д. "
+                    if hours > 0:
+                        time_str += f"{hours} ч. "
+                    time_str += f"{minutes} мин."
+                    
+                    await update.message.reply_text(
+                        f"⏱️ Вы уже запрашивали ссылки недавно.\n\n"
+                        f"⏰ Следующий запрос доступен через: {time_str}\n\n"
+                        f"📅 Последний запрос: {existing_user.last_links_request.strftime('%d.%m.%Y %H:%M')}\n\n"
+                        f"ℹ️ Ссылки можно получать раз в 48 часов для безопасности.",
+                        reply_markup=get_remove_keyboard()
+                    )
+                    return
+            
             # Create new temporary invite links (12 hours, single use)
             from bot.chat_manager import ChatManager
             chat_manager = ChatManager(settings.BOT_TOKEN)
@@ -183,6 +215,7 @@ async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⚠️ ВАЖНО:\n"
                 f"• Ссылки действуют только 12 часов\n"
                 f"• Каждая ссылка одноразовая (1 использование)\n"
+                f"• Следующий запрос доступен через 48 часов\n"
                 f"• Присоединяйтесь к чатам как можно скорее!"
             )
             
@@ -191,6 +224,11 @@ async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_remove_keyboard(),
                 disable_web_page_preview=True
             )
+            
+            # Update last request time
+            existing_user.last_links_request = now
+            db.commit()
+            logger.info(f"User {user.id} requested chat links. Next request available in 48 hours.")
     
     finally:
         db.close()

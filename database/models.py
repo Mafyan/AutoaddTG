@@ -27,6 +27,7 @@ class User(Base):
     position = Column(String(255), nullable=True)  # Job position
     role_id = Column(Integer, ForeignKey('roles.id', ondelete='SET NULL'), nullable=True)
     status = Column(String(20), default='pending')  # pending, approved, rejected, fired
+    last_links_request = Column(DateTime, nullable=True)  # Last time user requested chat links
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
