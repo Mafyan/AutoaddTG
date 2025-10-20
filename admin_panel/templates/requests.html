@@ -121,6 +121,7 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Имя</th>
+                                <th>Должность</th>
                                 <th>Телефон</th>
                                 <th>Username</th>
                                 <th>Дата подачи</th>
@@ -132,6 +133,7 @@
                                 <tr>
                                     <td>${user.id}</td>
                                     <td>${user.first_name || ''} ${user.last_name || ''}</td>
+                                    <td><span class="badge bg-info">${user.position || '-'}</span></td>
                                     <td>${user.phone_number}</td>
                                     <td>${user.username ? '@' + user.username : '-'}</td>
                                     <td>${new Date(user.created_at).toLocaleString('ru-RU')}</td>

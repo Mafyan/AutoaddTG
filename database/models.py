@@ -24,6 +24,7 @@ class User(Base):
     username = Column(String(255), nullable=True)
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
+    position = Column(String(255), nullable=True)  # Job position
     role_id = Column(Integer, ForeignKey('roles.id', ondelete='SET NULL'), nullable=True)
     status = Column(String(20), default='pending')  # pending, approved, rejected, fired
     created_at = Column(DateTime, default=datetime.utcnow)

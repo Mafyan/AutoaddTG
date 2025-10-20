@@ -17,6 +17,8 @@ from bot.handlers import (
     mychats_command,
     handle_contact,
     handle_text_phone,
+    handle_name,
+    handle_position,
     error_handler,
     list_chats_command,
     sync_chats_command,
@@ -55,6 +57,9 @@ def main():
     
     # Add message handlers
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
+    # Text handlers - order matters! Each handler checks its own state
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_position))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_phone))
     
     # Add group message handler for auto-detecting chats

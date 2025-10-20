@@ -81,6 +81,10 @@
                         <input type="text" class="form-control" id="editLastName" placeholder="Введите фамилию">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Должность</label>
+                        <input type="text" class="form-control" id="editPosition" placeholder="Введите должность">
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Роль</label>
                         <select class="form-select" id="editRoleSelect">
                             <option value="">Без роли</option>
@@ -162,6 +166,7 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Имя</th>
+                                <th>Должность</th>
                                 <th>Телефон</th>
                                 <th>Username</th>
                                 <th>Роль</th>
@@ -175,13 +180,14 @@
                                 <tr>
                                     <td>${user.id}</td>
                                     <td>${user.first_name || ''} ${user.last_name || ''}</td>
+                                    <td>${user.position || '-'}</td>
                                     <td>${user.phone_number}</td>
                                     <td>${user.username ? '@' + user.username : '-'}</td>
                                     <td>${user.role ? user.role.name : '-'}</td>
                                     <td>${statusBadge(user.status)}</td>
                                     <td>${new Date(user.created_at).toLocaleString('ru-RU')}</td>
                                     <td>
-                                        <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal(${user.id}, "${user.first_name || ''}", "${user.last_name || ''}", "${user.role?.id || ''}", "${user.status}")'>
+                                        <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal(${user.id}, "${user.first_name || ''}", "${user.last_name || ''}", "${user.position || ''}", "${user.role?.id || ''}", "${user.status}")'>
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                         ${user.status === 'approved' ? 
@@ -211,10 +217,11 @@
         }
     }
     
-    function openEditModal(userId, firstName, lastName, roleId, status) {
+    function openEditModal(userId, firstName, lastName, position, roleId, status) {
         document.getElementById('editUserId').value = userId;
         document.getElementById('editFirstName').value = firstName || '';
         document.getElementById('editLastName').value = lastName || '';
+        document.getElementById('editPosition').value = position || '';
         document.getElementById('editRoleSelect').value = roleId;
         document.getElementById('editStatusSelect').value = status;
         editModal.show();
@@ -224,6 +231,7 @@
         const userId = document.getElementById('editUserId').value;
         const firstName = document.getElementById('editFirstName').value.trim();
         const lastName = document.getElementById('editLastName').value.trim();
+        const position = document.getElementById('editPosition').value.trim();
         const roleId = document.getElementById('editRoleSelect').value;
         const status = document.getElementById('editStatusSelect').value;
         
@@ -238,6 +246,10 @@
             
             if (lastName) {
                 data.last_name = lastName;
+            }
+            
+            if (position) {
+                data.position = position;
             }
             
             if (roleId) {

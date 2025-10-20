@@ -13,7 +13,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def create_user(db: Session, phone_number: str, telegram_id: Optional[int] = None,
                 username: Optional[str] = None, first_name: Optional[str] = None,
-                last_name: Optional[str] = None) -> User:
+                last_name: Optional[str] = None, position: Optional[str] = None) -> User:
     """Create a new user."""
     user = User(
         phone_number=phone_number,
@@ -21,6 +21,7 @@ def create_user(db: Session, phone_number: str, telegram_id: Optional[int] = Non
         username=username,
         first_name=first_name,
         last_name=last_name,
+        position=position,
         status='pending'
     )
     db.add(user)
