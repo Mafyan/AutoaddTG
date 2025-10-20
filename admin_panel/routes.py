@@ -108,6 +108,11 @@ async def users_page(request: Request):
     """Users page."""
     return templates.TemplateResponse("users.html", {"request": request})
 
+@router.get("/role-groups", response_class=HTMLResponse)
+async def role_groups_page(request: Request):
+    """Role groups page."""
+    return templates.TemplateResponse("role_groups.html", {"request": request})
+
 @router.get("/roles", response_class=HTMLResponse)
 async def roles_page(request: Request):
     """Roles page."""

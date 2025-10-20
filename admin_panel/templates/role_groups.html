@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}Группы ролей{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="brand">
+        <i class="bi bi-robot"></i> User Control
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="/dashboard">
+            <i class="bi bi-speedometer2"></i> Панель управления
+        </a>
+        <a class="nav-link" href="/requests">
+            <i class="bi bi-person-check"></i> Заявки
+        </a>
+        <a class="nav-link" href="/users">
+            <i class="bi bi-people"></i> Пользователи
+        </a>
+        <a class="nav-link active" href="/role-groups">
+            <i class="bi bi-collection"></i> Группы ролей
+        </a>
+        <a class="nav-link" href="/roles">
+            <i class="bi bi-person-badge"></i> Роли
+        </a>
+        <a class="nav-link" href="/chats">
+            <i class="bi bi-chat-dots"></i> Чаты
+        </a>
+        <hr style="border-color: rgba(255,255,255,0.2);">
+        <a class="nav-link" href="#" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Выход
+        </a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 fw-bold">Группы ролей</h1>
+        <div>
+            <button class="btn btn-primary" onclick="openCreateModal()">
+                <i class="bi bi-plus-lg"></i> Создать группу
+            </button>
+            <button class="btn btn-outline-secondary" onclick="loadGroups()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить
+            </button>
+        </div>
+    </div>
+    
+    <div class="row g-4" id="groupsContainer">
+        <div class="col-12 text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Modal -->
+<div class="modal fade" id="groupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Создать группу</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="groupForm">
+                    <input type="hidden" id="groupId">
+                    <div class="mb-3">
+                        <label class="form-label">Название группы</label>
+                        <input type="text" class="form-control" id="groupName" required placeholder="Например: Отдел продаж">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" id="groupDescription" rows="3" placeholder="Описание группы"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveGroup()">
+                    <i class="bi bi-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let groupModal;
+    let isEditMode = false;
+    
+    async function loadGroups() {
+        try {
+            const response = await apiRequest('/api/role-groups');
+            const groups = await response.json();
+            
+            const container = document.getElementById('groupsContainer');
+            
+            if (groups.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12 text-center py-5">
+                        <i class="bi bi-collection" style="font-size: 4rem; color: #dee2e6;"></i>
+                        <p class="text-muted mt-3">Нет групп ролей</p>
+                        <button class="btn btn-primary" onclick="openCreateModal()">
+                            <i class="bi bi-plus-lg"></i> Создать первую группу
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            groups.forEach(group => {
+                html += `
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h5 class="card-title mb-0">
+                                        <i class="bi bi-collection text-primary"></i> ${group.name}
+                                    </h5>
+                                    <div class="btn-group">
+                                        <button class="btn btn-sm btn-outline-primary" onclick='openEditModal(${JSON.stringify(group)})' title="Редактировать">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteGroup(${group.id}, '${group.name}')" title="Удалить">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                ${group.description ? `<p class="card-text text-muted small">${group.description}</p>` : ''}
+                                
+                                <hr>
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        <i class="bi bi-person-badge"></i> Ролей: <strong>${group.roles_count}</strong>
+                                    </small>
+                                    <a href="/roles?group=${group.id}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-arrow-right"></i> Посмотреть роли
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Error loading groups:', error);
+            alert('Ошибка при загрузке групп');
+        }
+    }
+    
+    function openCreateModal() {
+        isEditMode = false;
+        document.getElementById('modalTitle').textContent = 'Создать группу';
+        document.getElementById('groupId').value = '';
+        document.getElementById('groupName').value = '';
+        document.getElementById('groupDescription').value = '';
+        groupModal.show();
+    }
+    
+    function openEditModal(group) {
+        isEditMode = true;
+        document.getElementById('modalTitle').textContent = 'Редактировать группу';
+        document.getElementById('groupId').value = group.id;
+        document.getElementById('groupName').value = group.name;
+        document.getElementById('groupDescription').value = group.description || '';
+        groupModal.show();
+    }
+    
+    async function saveGroup() {
+        const groupId = document.getElementById('groupId').value;
+        const name = document.getElementById('groupName').value.trim();
+        const description = document.getElementById('groupDescription').value.trim();
+        
+        if (!name) {
+            alert('Введите название группы');
+            return;
+        }
+        
+        try {
+            const data = { name, description };
+            const url = isEditMode ? `/api/role-groups/${groupId}` : '/api/role-groups';
+            const method = isEditMode ? 'PUT' : 'POST';
+            
+            const response = await apiRequest(url, {
+                method: method,
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                groupModal.hide();
+                loadGroups();
+                alert(isEditMode ? 'Группа обновлена!' : 'Группа создана!');
+            } else {
+                const error = await response.json();
+                alert('Ошибка: ' + (error.detail || 'Не удалось сохранить группу'));
+            }
+        } catch (error) {
+            console.error('Error saving group:', error);
+            alert('Ошибка при сохранении группы');
+        }
+    }
+    
+    async function deleteGroup(groupId, groupName) {
+        if (!confirm(`Удалить группу "${groupName}"?\n\nВсе роли из этой группы останутся, но будут без группы.`)) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/role-groups/${groupId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                loadGroups();
+                alert('Группа удалена!');
+            } else {
+                const error = await response.json();
+                alert('Ошибка: ' + (error.detail || 'Не удалось удалить группу'));
+            }
+        } catch (error) {
+            console.error('Error deleting group:', error);
+            alert('Ошибка при удалении группы');
+        }
+    }
+    
+    // Check authentication and initialize
+    if (!getToken()) {
+        window.location.href = '/';
+    } else {
+        groupModal = new bootstrap.Modal(document.getElementById('groupModal'));
+        loadGroups();
+    }
+</script>
+{% endblock %}
+

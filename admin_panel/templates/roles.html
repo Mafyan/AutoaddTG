@@ -17,6 +17,9 @@
         <a class="nav-link" href="/users">
             <i class="bi bi-people"></i> Пользователи
         </a>
+        <a class="nav-link" href="/role-groups">
+            <i class="bi bi-collection"></i> Группы ролей
+        </a>
         <a class="nav-link active" href="/roles">
             <i class="bi bi-person-badge"></i> Роли
         </a>
@@ -72,6 +75,12 @@
                         <textarea class="form-control" id="roleDescription" rows="3"></textarea>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Группа</label>
+                        <select class="form-select" id="roleGroupId">
+                            <option value="">Без группы</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Привязанные чаты</label>
                         <div id="chatsCheckboxes" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
                             <div class="text-center py-3">
@@ -123,59 +132,127 @@
                 return;
             }
             
-            container.innerHTML = roles.map(role => `
-                <div class="col-md-6 col-lg-4">
-                    <div class="stat-card">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <div>
-                                <h5 class="fw-bold mb-1">${role.name}</h5>
-                                <p class="text-muted small mb-0">${role.description || 'Нет описания'}</p>
-                            </div>
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
-                                    <i class="bi bi-three-dots-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" href="#" onclick="openEditModal(${role.id})">
-                                        <i class="bi bi-pencil"></i> Редактировать
-                                    </a></li>
-                                    <li><a class="dropdown-item text-danger" href="#" onclick="deleteRole(${role.id})">
-                                        <i class="bi bi-trash"></i> Удалить
-                                    </a></li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <small class="text-muted">Пользователей: <strong>${role.user_count}</strong></small>
-                        </div>
-                        <div>
-                            <small class="text-muted d-block mb-2">Чаты (${role.chats.length}):</small>
-                            ${role.chats.length > 0 ? 
-                                role.chats.slice(0, 3).map(chat => 
-                                    `<span class="badge bg-secondary me-1 mb-1">${chat.name}</span>`
-                                ).join('') + (role.chats.length > 3 ? `<span class="badge bg-light text-dark">+${role.chats.length - 3}</span>` : '')
-                                : '<span class="text-muted">Нет привязанных чатов</span>'}
-                        </div>
+            // Group roles by group
+            const grouped = {};
+            const noGroup = [];
+            
+            roles.forEach(role => {
+                if (role.group) {
+                    if (!grouped[role.group.name]) {
+                        grouped[role.group.name] = [];
+                    }
+                    grouped[role.group.name].push(role);
+                } else {
+                    noGroup.push(role);
+                }
+            });
+            
+            let html = '';
+            
+            // Render grouped roles
+            Object.keys(grouped).sort().forEach(groupName => {
+                html += `
+                    <div class="col-12">
+                        <h4 class="mb-3 mt-4">
+                            <i class="bi bi-collection text-primary"></i> ${groupName}
+                            <span class="badge bg-secondary">${grouped[groupName].length}</span>
+                        </h4>
                     </div>
-                </div>
-            `).join('');
+                `;
+                grouped[groupName].forEach(role => {
+                    html += renderRoleCard(role);
+                });
+            });
+            
+            // Render ungrouped roles
+            if (noGroup.length > 0) {
+                html += `
+                    <div class="col-12">
+                        <h4 class="mb-3 mt-4">
+                            <i class="bi bi-dash-circle text-muted"></i> Без группы
+                            <span class="badge bg-secondary">${noGroup.length}</span>
+                        </h4>
+                    </div>
+                `;
+                noGroup.forEach(role => {
+                    html += renderRoleCard(role);
+                });
+            }
+            
+            container.innerHTML = html;
         } catch (error) {
             console.error('Error loading roles:', error);
         }
     }
     
-    function openCreateModal() {
+    function renderRoleCard(role) {
+        return `
+            <div class="col-md-6 col-lg-4">
+                <div class="stat-card">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="fw-bold mb-1">${role.name}</h5>
+                            <p class="text-muted small mb-0">${role.description || 'Нет описания'}</p>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="openEditModal(${role.id})">
+                                    <i class="bi bi-pencil"></i> Редактировать
+                                </a></li>
+                                <li><a class="dropdown-item text-danger" href="#" onclick="deleteRole(${role.id})">
+                                    <i class="bi bi-trash"></i> Удалить
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Пользователей: <strong>${role.user_count}</strong></small>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block mb-2">Чаты (${role.chats.length}):</small>
+                        ${role.chats.length > 0 ? 
+                            role.chats.slice(0, 3).map(chat => 
+                                `<span class="badge bg-secondary me-1 mb-1">${chat.name}</span>`
+                            ).join('') + (role.chats.length > 3 ? `<span class="badge bg-light text-dark">+${role.chats.length - 3}</span>` : '')
+                            : '<span class="text-muted">Нет привязанных чатов</span>'}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    async function loadRoleGroups() {
+        try {
+            const response = await apiRequest('/api/role-groups');
+            const groups = await response.json();
+            
+            const select = document.getElementById('roleGroupId');
+            select.innerHTML = '<option value="">Без группы</option>' +
+                groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+        } catch (error) {
+            console.error('Error loading role groups:', error);
+        }
+    }
+    
+    async function openCreateModal() {
         document.getElementById('roleModalTitle').textContent = 'Создать роль';
         document.getElementById('roleId').value = '';
         document.getElementById('roleName').value = '';
         document.getElementById('roleDescription').value = '';
+        document.getElementById('roleGroupId').value = '';
         
+        await loadRoleGroups();
         renderChatCheckboxes([]);
         roleModal.show();
     }
     
     async function openEditModal(roleId) {
         try {
+            await loadRoleGroups();
+            
             const response = await apiRequest('/api/roles');
             const roles = await response.json();
             const role = roles.find(r => r.id === roleId);
@@ -185,6 +262,7 @@
                 document.getElementById('roleId').value = role.id;
                 document.getElementById('roleName').value = role.name;
                 document.getElementById('roleDescription').value = role.description || '';
+                document.getElementById('roleGroupId').value = role.group_id || '';
                 
                 const chatIds = role.chats.map(c => c.id);
                 renderChatCheckboxes(chatIds);
@@ -219,6 +297,7 @@
         const roleId = document.getElementById('roleId').value;
         const name = document.getElementById('roleName').value.trim();
         const description = document.getElementById('roleDescription').value.trim();
+        const groupId = document.getElementById('roleGroupId').value;
         
         if (!name) {
             alert('Пожалуйста, введите название роли');
@@ -232,6 +311,7 @@
             const data = {
                 name: name,
                 description: description || null,
+                group_id: groupId ? parseInt(groupId) : null,
                 chat_ids: selectedChats
             };
             
@@ -246,7 +326,7 @@
                 // Create new role
                 const createResponse = await apiRequest('/api/roles', {
                     method: 'POST',
-                    body: JSON.stringify({name: data.name, description: data.description})
+                    body: JSON.stringify({name: data.name, description: data.description, group_id: data.group_id})
                 });
                 
                 const result = await createResponse.json();
