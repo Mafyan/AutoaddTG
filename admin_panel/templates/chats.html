@@ -70,6 +70,10 @@
             <button class="btn btn-secondary" onclick="forceRefreshMembers()">
                 <i class="bi bi-arrow-clockwise"></i> Обновить участников чата
             </button>
+            
+            <button class="btn btn-primary" onclick="fetchAllChatPhotos()">
+                <i class="bi bi-images"></i> Обновить фото всех чатов
+            </button>
         </div>
     </div>
     
@@ -346,6 +350,7 @@
                     <table class="table table-hover">
                         <thead>
                             <tr>
+                                <th style="width: 60px;">Фото</th>
                                 <th>ID</th>
                                 <th>Название</th>
                                 <th>Ссылка</th>
@@ -358,6 +363,20 @@
                         <tbody>
                             ${chats.map(chat => `
                                 <tr>
+                                    <td>
+                                        ${chat.chat_photo ? 
+                                            `<img src="/${chat.chat_photo}" alt="${chat.chat_name}" 
+                                                 class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;"
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                             <div class="rounded-circle bg-secondary text-white d-none align-items-center justify-content-center" 
+                                                  style="width: 40px; height: 40px; font-size: 1.2rem;">
+                                                <i class="bi bi-chat-dots"></i>
+                                             </div>` : 
+                                            `<div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" 
+                                                 style="width: 40px; height: 40px; font-size: 1.2rem;">
+                                                <i class="bi bi-chat-dots"></i>
+                                             </div>`}
+                                    </td>
                                     <td>${chat.id}</td>
                                     <td>${chat.chat_name}</td>
                                     <td>
@@ -381,7 +400,10 @@
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                         ${chat.chat_id ? 
-                                            `<button class="btn btn-sm btn-outline-info me-1" onclick="openPhotoModal(${chat.id}, ${chat.chat_id}, '${chat.chat_name}')" title="Изменить фото">
+                                            `<button class="btn btn-sm btn-outline-success me-1" onclick="fetchChatPhoto(${chat.id})" title="Получить фото из Telegram">
+                                                <i class="bi bi-download"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-info me-1" onclick="openPhotoModal(${chat.id}, ${chat.chat_id}, '${chat.chat_name}')" title="Загрузить фото">
                                                 <i class="bi bi-image"></i>
                                             </button>` : ''}
                                         <button class="btn btn-sm btn-outline-danger" onclick="deleteChat(${chat.id})">
@@ -597,6 +619,71 @@
             // Re-enable button
             uploadBtn.disabled = false;
             uploadBtn.innerHTML = '<i class="bi bi-upload"></i> Загрузить и установить';
+        }
+    }
+    
+    async function fetchChatPhoto(chatId) {
+        const button = event.target.closest('button');
+        const originalHtml = button.innerHTML;
+        
+        try {
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            const response = await apiRequest(`/api/chats/${chatId}/fetch-photo`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.status === 'success') {
+                    showToast('Фото чата успешно получено из Telegram!', 'success');
+                    loadChats(); // Reload to show new photo
+                } else if (result.status === 'no_photo') {
+                    showToast('У этого чата нет фото в Telegram', 'info');
+                } else {
+                    showToast('Не удалось получить фото', 'warning');
+                }
+            } else {
+                const error = await response.json();
+                showToast('Ошибка: ' + (error.detail || 'Не удалось получить фото'), 'error');
+            }
+        } catch (error) {
+            console.error('Error fetching chat photo:', error);
+            showToast('Ошибка при получении фото чата', 'error');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+        }
+    }
+    
+    async function fetchAllChatPhotos() {
+        if (!confirm('Обновить фото всех чатов из Telegram? Это может занять некоторое время.')) {
+            return;
+        }
+        
+        const button = document.querySelector('button[onclick="fetchAllChatPhotos()"]');
+        setButtonLoading(button, true);
+        
+        try {
+            const response = await apiRequest('/api/chats/fetch-all-photos', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                const msg = `Обновление завершено!\n✅ Успешно: ${result.results.success}\nℹ️ Без фото: ${result.results.no_photo}\n❌ Ошибки: ${result.results.failed}`;
+                showToast(msg, 'success');
+                loadChats(); // Reload to show new photos
+            } else {
+                const error = await response.json();
+                showToast('Ошибка: ' + (error.detail || 'Не удалось обновить фото'), 'error');
+            }
+        } catch (error) {
+            console.error('Error fetching all chat photos:', error);
+            showToast('Ошибка при обновлении фото чатов', 'error');
+        } finally {
+            setButtonLoading(button, false);
         }
     }
     

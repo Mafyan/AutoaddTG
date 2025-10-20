@@ -1125,6 +1125,7 @@ async def api_get_chats(
         "chat_id": chat.chat_id,
         "chat_name": chat.chat_name,
         "chat_link": chat.chat_link,
+        "chat_photo": chat.chat_photo,
         "description": chat.description,
         "roles": [{"id": role.id, "name": role.name} for role in chat.roles]
     } for chat in chats]
@@ -1168,6 +1169,96 @@ async def api_delete_chat(
     if delete_chat(db, chat_id):
         return {"status": "success", "message": "Chat deleted"}
     raise HTTPException(status_code=404, detail="Chat not found")
+
+@router.post("/api/chats/{chat_id}/fetch-photo")
+async def api_fetch_chat_photo(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Fetch current chat photo from Telegram and save it."""
+    try:
+        # Get chat from database
+        chat = get_chat_by_id(db, chat_id)
+        if not chat or not chat.chat_id:
+            raise HTTPException(status_code=404, detail="Chat not found or no Telegram ID")
+        
+        if not settings.BOT_TOKEN:
+            raise HTTPException(status_code=500, detail="Bot token not configured")
+        
+        from bot.chat_manager import ChatManager
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        print(f"📷 Fetching photo for chat {chat.chat_id}")
+        photo_path = await chat_manager.get_chat_photo(chat.chat_id)
+        
+        if photo_path:
+            # Update database with photo path
+            update_chat(db, chat_id, chat_photo=photo_path)
+            
+            print(f"✅ Chat photo fetched and saved: {photo_path}")
+            return {
+                "status": "success",
+                "message": "Chat photo fetched successfully",
+                "photo_path": photo_path
+            }
+        else:
+            return {
+                "status": "no_photo",
+                "message": "Chat has no photo",
+                "photo_path": None
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching chat photo: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to fetch photo: {str(e)}")
+
+@router.post("/api/chats/fetch-all-photos")
+async def api_fetch_all_chat_photos(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Fetch photos for all chats from Telegram."""
+    try:
+        if not settings.BOT_TOKEN:
+            raise HTTPException(status_code=500, detail="Bot token not configured")
+        
+        chats = get_chats(db)
+        from bot.chat_manager import ChatManager
+        chat_manager = ChatManager(settings.BOT_TOKEN)
+        
+        results = {
+            "success": 0,
+            "no_photo": 0,
+            "failed": 0
+        }
+        
+        for chat in chats:
+            if chat.chat_id:
+                try:
+                    photo_path = await chat_manager.get_chat_photo(chat.chat_id)
+                    if photo_path:
+                        update_chat(db, chat.id, chat_photo=photo_path)
+                        results["success"] += 1
+                    else:
+                        results["no_photo"] += 1
+                except Exception as e:
+                    print(f"Failed to fetch photo for chat {chat.id}: {e}")
+                    results["failed"] += 1
+        
+        return {
+            "status": "success",
+            "message": f"Processed {len(chats)} chats",
+            "results": results
+        }
+        
+    except Exception as e:
+        print(f"❌ Error fetching all chat photos: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch photos: {str(e)}")
 
 @router.post("/api/chats/{chat_id}/upload-photo")
 async def api_upload_chat_photo(

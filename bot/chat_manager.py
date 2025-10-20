@@ -973,3 +973,62 @@ class ChatManager:
             import traceback
             traceback.print_exc()
             return False
+    
+    async def get_chat_photo(self, chat_id: int) -> Optional[str]:
+        """
+        Get current chat photo from Telegram and save it locally.
+        
+        Args:
+            chat_id: Telegram chat ID
+            
+        Returns:
+            Relative path to saved photo or None if chat has no photo
+        """
+        try:
+            print(f"\n{'='*60}")
+            print(f"📷 FETCHING CHAT PHOTO")
+            print(f"{'='*60}")
+            print(f"📊 Chat ID: {chat_id}")
+            print(f"{'='*60}\n")
+            
+            # Get chat info
+            chat = await self.bot.get_chat(chat_id)
+            
+            if not chat.photo:
+                print(f"ℹ️  Chat {chat_id} has no photo")
+                return None
+            
+            # Get the big photo file
+            photo_file = await self.bot.get_file(chat.photo.big_file_id)
+            
+            # Create uploads directory if not exists
+            import os
+            from pathlib import Path
+            uploads_dir = Path("uploads/chat_photos")
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename
+            import uuid
+            unique_filename = f"{uuid.uuid4()}.jpg"
+            file_path = uploads_dir / unique_filename
+            
+            # Download photo
+            print(f"⬇️  Downloading photo...")
+            await photo_file.download_to_drive(str(file_path))
+            
+            relative_path = f"uploads/chat_photos/{unique_filename}"
+            print(f"✅ Chat photo saved: {relative_path}")
+            logger.info(f"Successfully fetched and saved chat photo for chat {chat_id}")
+            
+            return relative_path
+            
+        except TelegramError as e:
+            print(f"❌ Telegram error: {e}")
+            logger.error(f"Failed to get chat photo for chat {chat_id}: {e}")
+            return None
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            logger.error(f"Unexpected error getting chat photo for chat {chat_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
