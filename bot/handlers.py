@@ -1,5 +1,6 @@
 """Telegram bot message handlers."""
 import logging
+from functools import wraps
 from telegram import Update
 from telegram.ext import ContextTypes
 from database.database import SessionLocal
@@ -26,6 +27,18 @@ AWAITING_PHONE = 1
 AWAITING_NAME = 2
 AWAITING_POSITION = 3
 
+def private_chat_only(func):
+    """Decorator to ensure command is only executed in private chats."""
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # Check if message is from a private chat
+        if update.effective_chat.type != 'private':
+            logger.info(f"Ignoring command {func.__name__} from non-private chat {update.effective_chat.id}")
+            return
+        return await func(update, context)
+    return wrapper
+
+@private_chat_only
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command."""
     user = update.effective_user
@@ -68,6 +81,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
+@private_chat_only
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     help_text = (
@@ -80,6 +94,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(help_text, reply_markup=get_remove_keyboard())
 
+@private_chat_only
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /status command."""
     user = update.effective_user
@@ -122,6 +137,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
+@private_chat_only
 async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /mychats command - creates new temporary invite links. Limited to once per 48 hours."""
     from datetime import datetime, timedelta
@@ -233,6 +249,7 @@ async def mychats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
+@private_chat_only
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle contact (phone number) sharing."""
     user = update.effective_user
@@ -287,6 +304,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
+@private_chat_only
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Universal handler for all text messages based on user state."""
     user = update.effective_user
@@ -444,6 +462,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пожалуйста, попробуйте позже или обратитесь к администратору."
         )
 
+@private_chat_only
 async def list_chats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /listchats command for admins."""
     user = update.effective_user
@@ -491,6 +510,7 @@ async def list_chats_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     finally:
         db.close()
 
+@private_chat_only
 async def sync_chats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /syncchats command for admins."""
     user = update.effective_user
@@ -630,6 +650,7 @@ async def handle_message_in_group(update: Update, context: ContextTypes.DEFAULT_
     finally:
         db.close()
 
+@private_chat_only
 async def sync_members_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /syncmembers command for admins."""
     user = update.effective_user
@@ -679,6 +700,7 @@ async def sync_members_command(update: Update, context: ContextTypes.DEFAULT_TYP
     finally:
         db.close()
 
+@private_chat_only
 async def refresh_members_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /refreshmembers command for admins - force refresh chat members."""
     user = update.effective_user
