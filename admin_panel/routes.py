@@ -37,9 +37,11 @@ class LoginRequest(BaseModel):
 class RoleCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    group_id: Optional[int] = None
 
 class RoleUpdate(BaseModel):
     name: Optional[str] = None
+    group_id: Optional[int] = None
     description: Optional[str] = None
     chat_ids: Optional[List[int]] = None
 
@@ -951,6 +953,99 @@ async def api_delete_user(
     
     raise HTTPException(status_code=404, detail="User not found")
 
+# ==================== ROLE GROUP API ====================
+
+@router.get("/api/role-groups")
+async def api_get_role_groups(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get all role groups."""
+    from database.crud import get_role_groups
+    groups = get_role_groups(db, limit=1000)
+    return [{
+        "id": group.id,
+        "name": group.name,
+        "description": group.description,
+        "created_at": group.created_at.isoformat() if group.created_at else None,
+        "roles_count": len(group.roles) if group.roles else 0
+    } for group in groups]
+
+class RoleGroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+@router.post("/api/role-groups")
+async def api_create_role_group(
+    group_data: RoleGroupCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Create a new role group."""
+    from database.crud import create_role_group, get_role_group_by_name
+    
+    # Check if group with same name already exists
+    existing = get_role_group_by_name(db, group_data.name)
+    if existing:
+        raise HTTPException(status_code=400, detail="Role group with this name already exists")
+    
+    group = create_role_group(db, name=group_data.name, description=group_data.description)
+    return {
+        "id": group.id,
+        "name": group.name,
+        "description": group.description
+    }
+
+class RoleGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+@router.put("/api/role-groups/{group_id}")
+async def api_update_role_group(
+    group_id: int,
+    group_data: RoleGroupUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Update role group."""
+    from database.crud import update_role_group, get_role_group_by_id
+    
+    group = get_role_group_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Role group not found")
+    
+    update_data = group_data.dict(exclude_unset=True)
+    updated_group = update_role_group(db, group_id, **update_data)
+    
+    return {
+        "id": updated_group.id,
+        "name": updated_group.name,
+        "description": updated_group.description
+    }
+
+@router.delete("/api/role-groups/{group_id}")
+async def api_delete_role_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Delete role group."""
+    from database.crud import delete_role_group, get_role_group_by_id
+    
+    group = get_role_group_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Role group not found")
+    
+    # Check if group has roles
+    if group.roles and len(group.roles) > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot delete group with {len(group.roles)} roles. Remove roles first."
+        )
+    
+    delete_role_group(db, group_id)
+    return {"status": "success", "message": "Role group deleted"}
+
 # ==================== ROLE API ====================
 
 @router.get("/api/roles")
@@ -964,6 +1059,8 @@ async def api_get_roles(
         "id": role.id,
         "name": role.name,
         "description": role.description,
+        "group": {"id": role.group.id, "name": role.group.name} if role.group else None,
+        "group_id": role.group_id,
         "chats": [{"id": chat.id, "name": chat.chat_name} for chat in role.chats],
         "user_count": len(role.users)
     } for role in roles]
@@ -975,7 +1072,7 @@ async def api_create_role(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Create new role."""
-    new_role = create_role(db, name=role.name, description=role.description)
+    new_role = create_role(db, name=role.name, description=role.description, group_id=role.group_id)
     return {"status": "success", "role_id": new_role.id}
 
 @router.put("/api/roles/{role_id}")

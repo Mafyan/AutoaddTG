@@ -110,11 +110,57 @@ def get_fired_users(db: Session, skip: int = 0, limit: int = 100) -> List[User]:
     """Get list of fired users."""
     return db.query(User).filter(User.status == 'fired').offset(skip).limit(limit).all()
 
+# ==================== ROLE GROUP OPERATIONS ====================
+
+def create_role_group(db: Session, name: str, description: Optional[str] = None):
+    """Create a new role group."""
+    from database.models import RoleGroup
+    role_group = RoleGroup(name=name, description=description)
+    db.add(role_group)
+    db.commit()
+    db.refresh(role_group)
+    return role_group
+
+def get_role_group_by_id(db: Session, group_id: int):
+    """Get role group by ID."""
+    from database.models import RoleGroup
+    return db.query(RoleGroup).filter(RoleGroup.id == group_id).first()
+
+def get_role_group_by_name(db: Session, name: str):
+    """Get role group by name."""
+    from database.models import RoleGroup
+    return db.query(RoleGroup).filter(RoleGroup.name == name).first()
+
+def get_role_groups(db: Session, skip: int = 0, limit: int = 100):
+    """Get list of role groups."""
+    from database.models import RoleGroup
+    return db.query(RoleGroup).offset(skip).limit(limit).all()
+
+def update_role_group(db: Session, group_id: int, **kwargs):
+    """Update role group information."""
+    group = get_role_group_by_id(db, group_id)
+    if group:
+        for key, value in kwargs.items():
+            if hasattr(group, key) and key != 'roles':
+                setattr(group, key, value)
+        db.commit()
+        db.refresh(group)
+    return group
+
+def delete_role_group(db: Session, group_id: int) -> bool:
+    """Delete role group."""
+    group = get_role_group_by_id(db, group_id)
+    if group:
+        db.delete(group)
+        db.commit()
+        return True
+    return False
+
 # ==================== ROLE OPERATIONS ====================
 
-def create_role(db: Session, name: str, description: Optional[str] = None) -> Role:
+def create_role(db: Session, name: str, description: Optional[str] = None, group_id: Optional[int] = None) -> Role:
     """Create a new role."""
-    role = Role(name=name, description=description)
+    role = Role(name=name, description=description, group_id=group_id)
     db.add(role)
     db.commit()
     db.refresh(role)

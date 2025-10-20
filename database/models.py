@@ -37,6 +37,23 @@ class User(Base):
     def __repr__(self):
         return f"<User {self.phone_number} - {self.status}>"
 
+class RoleGroup(Base):
+    """Role group model for organizing roles."""
+    
+    __tablename__ = "role_groups"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String(255), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    roles = relationship("Role", back_populates="group")
+    
+    def __repr__(self):
+        return f"<RoleGroup {self.name}>"
+
 class Role(Base):
     """Role model for defining user roles."""
     
@@ -45,10 +62,12 @@ class Role(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String(255), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
+    group_id = Column(Integer, ForeignKey('role_groups.id', ondelete='SET NULL'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    group = relationship("RoleGroup", back_populates="roles")
     users = relationship("User", back_populates="role")
     chats = relationship("Chat", secondary=role_chats, back_populates="roles")
     
