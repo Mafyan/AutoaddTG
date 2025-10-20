@@ -205,6 +205,9 @@
                                                 `<button class="btn btn-sm btn-outline-info" onclick="viewUserChats(${user.id})" title="Чаты">
                                                     <i class="bi bi-chat-dots"></i>
                                                 </button>
+                                                <button class="btn btn-sm btn-outline-secondary" onclick="resetLinkCooldown(${user.id})" title="Сбросить ограничение на запрос ссылок">
+                                                    <i class="bi bi-clock-history"></i>
+                                                </button>
                                                 <button class="btn btn-sm btn-outline-warning" onclick="fireUser(${user.id})" title="Уволить">
                                                     <i class="bi bi-person-x"></i>
                                                 </button>` : 
@@ -326,6 +329,28 @@
         } catch (error) {
             console.error('Error rehiring user:', error);
             alert('Ошибка при восстановлении сотрудника');
+        }
+    }
+    
+    async function resetLinkCooldown(userId) {
+        if (!confirm('Сбросить ограничение на запрос ссылок для этого пользователя?\n\nПользователь сможет сразу запросить новые ссылки на чаты.')) {
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/users/${userId}/reset-link-cooldown`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                alert('✅ Ограничение сброшено!\n\nПользователь получил уведомление и может запросить новые ссылки.');
+            } else {
+                const error = await response.json();
+                alert('❌ Ошибка: ' + (error.detail || 'Не удалось сбросить ограничение'));
+            }
+        } catch (error) {
+            console.error('Error resetting link cooldown:', error);
+            alert('❌ Ошибка при сбросе ограничения');
         }
     }
     

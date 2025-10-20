@@ -531,6 +531,41 @@ async def api_fire_user(
     
     return {"status": "success", "message": "User fired and removed from all chats"}
 
+@router.post("/api/users/{user_id}/reset-link-cooldown")
+async def api_reset_link_cooldown(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Reset user's link request cooldown (allows immediate link request)."""
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Reset the last_links_request to None
+    user.last_links_request = None
+    db.commit()
+    
+    logger.info(f"Admin {current_admin.username} reset link cooldown for user {user_id}")
+    
+    # Send notification to user if they have telegram_id
+    if user.telegram_id and settings.BOT_TOKEN:
+        try:
+            bot = Bot(token=settings.BOT_TOKEN)
+            message = (
+                "✅ Администратор сбросил ограничение на запрос ссылок.\n\n"
+                "Теперь вы можете запросить новые ссылки на чаты командой /mychats"
+            )
+            await bot.send_message(chat_id=user.telegram_id, text=message)
+        except Exception as e:
+            logger.error(f"Failed to send notification to user {user.telegram_id}: {e}")
+    
+    return {
+        "status": "success", 
+        "message": "Link cooldown reset successfully",
+        "user_id": user_id
+    }
+
 @router.post("/api/chats/sync")
 async def api_sync_chats(
     db: Session = Depends(get_db),
