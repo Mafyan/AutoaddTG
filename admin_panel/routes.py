@@ -148,6 +148,7 @@ async def api_get_users(
         "username": user.username,
         "first_name": user.first_name,
         "last_name": user.last_name,
+        "position": user.position,
         "role": {"id": user.role.id, "name": user.role.name} if user.role else None,
         "status": user.status,
         "created_at": user.created_at.isoformat() if user.created_at else None
