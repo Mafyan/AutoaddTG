@@ -9,6 +9,7 @@ from telegram import Bot
 from telegram.error import TelegramError
 import os
 import uuid
+import logging
 from pathlib import Path
 
 from database.database import get_db
@@ -25,6 +26,9 @@ from database.models import Admin, ChatMember
 from admin_panel.auth import create_access_token, get_current_admin
 from bot.utils import format_chat_links
 from config import settings
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(settings.TEMPLATES_DIR))
