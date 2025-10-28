@@ -129,6 +129,88 @@
     </div>
 </div>
 
+<!-- View/Edit Chat Modal -->
+<div class="modal fade" id="viewChatModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Просмотр и редактирование чата</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <!-- Chat Photo Column -->
+                    <div class="col-md-5 text-center">
+                        <div class="mb-3">
+                            <img id="viewChatPhoto" src="" alt="Chat Photo" 
+                                 class="img-fluid rounded shadow" 
+                                 style="max-width: 100%; max-height: 400px; object-fit: cover;"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div id="viewChatPhotoPlaceholder" class="rounded bg-secondary text-white d-none align-items-center justify-content-center shadow" 
+                                 style="width: 100%; height: 300px; font-size: 4rem;">
+                                <i class="bi bi-chat-dots"></i>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-sm btn-outline-primary" onclick="openPhotoModalFromView()">
+                                <i class="bi bi-upload"></i> Загрузить новое фото
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" onclick="fetchChatPhotoFromView()">
+                                <i class="bi bi-download"></i> Получить фото из Telegram
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Chat Details Column -->
+                    <div class="col-md-7">
+                        <form id="viewChatForm">
+                            <input type="hidden" id="viewChatId">
+                            <input type="hidden" id="viewChatTgId">
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">ID чата</label>
+                                <input type="text" class="form-control" id="viewChatIdDisplay" readonly>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Название чата</label>
+                                <input type="text" class="form-control" id="viewChatName" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Описание</label>
+                                <textarea class="form-control" id="viewChatDescription" rows="5"></textarea>
+                                <small class="text-muted">Краткое описание чата или группы</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Ссылка на чат</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="viewChatLink" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyChatLink()">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Telegram Chat ID</label>
+                                <input type="text" class="form-control" id="viewChatTgIdDisplay" readonly>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" onclick="saveChatFromView()">
+                    <i class="bi bi-save"></i> Сохранить изменения
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Upload Photo Modal -->
 <div class="modal fade" id="photoModal" tabindex="-1">
     <div class="modal-dialog">
@@ -363,7 +445,7 @@
                         <tbody>
                             ${chats.map(chat => `
                                 <tr>
-                                    <td>
+                                    <td style="cursor: pointer;" onclick="openViewChatModal(${chat.id})" title="Нажмите для просмотра деталей">
                                         ${chat.chat_photo ? 
                                             `<img src="/${chat.chat_photo}" alt="${chat.chat_name}" 
                                                  class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;"
@@ -687,12 +769,143 @@
         }
     }
     
+    // Open view chat modal
+    let viewChatModal;
+    let currentViewChatData = null;
+    
+    async function openViewChatModal(chatId) {
+        try {
+            const response = await apiRequest('/api/chats');
+            const chats = await response.json();
+            const chat = chats.find(c => c.id === chatId);
+            
+            if (!chat) {
+                showToast('Чат не найден', 'error');
+                return;
+            }
+            
+            // Store current chat data
+            currentViewChatData = chat;
+            
+            // Fill form
+            document.getElementById('viewChatId').value = chat.id;
+            document.getElementById('viewChatTgId').value = chat.chat_id || '';
+            document.getElementById('viewChatIdDisplay').value = chat.id;
+            document.getElementById('viewChatName').value = chat.chat_name;
+            document.getElementById('viewChatDescription').value = chat.description || '';
+            document.getElementById('viewChatLink').value = chat.chat_link || '';
+            document.getElementById('viewChatTgIdDisplay').value = chat.chat_id || 'Не указан';
+            
+            // Set photo
+            const photoImg = document.getElementById('viewChatPhoto');
+            const photoPlaceholder = document.getElementById('viewChatPhotoPlaceholder');
+            
+            if (chat.chat_photo) {
+                photoImg.src = '/' + chat.chat_photo;
+                photoImg.style.display = 'block';
+                photoPlaceholder.style.display = 'none';
+            } else {
+                photoImg.style.display = 'none';
+                photoPlaceholder.style.display = 'flex';
+            }
+            
+            // Show modal
+            viewChatModal.show();
+        } catch (error) {
+            console.error('Error opening view chat modal:', error);
+            showToast('Ошибка при загрузке данных чата', 'error');
+        }
+    }
+    
+    // Save chat from view modal
+    async function saveChatFromView() {
+        const chatId = document.getElementById('viewChatId').value;
+        const chatName = document.getElementById('viewChatName').value.trim();
+        const description = document.getElementById('viewChatDescription').value.trim();
+        
+        if (!chatName) {
+            showToast('Название чата обязательно', 'error');
+            return;
+        }
+        
+        try {
+            const response = await apiRequest(`/api/chats/${chatId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    chat_name: chatName,
+                    description: description
+                })
+            });
+            
+            if (response.ok) {
+                showToast('Чат успешно обновлен!', 'success');
+                viewChatModal.hide();
+                loadChats();
+            } else {
+                const error = await response.json();
+                showToast('Ошибка: ' + (error.detail || 'Не удалось обновить чат'), 'error');
+            }
+        } catch (error) {
+            console.error('Error saving chat:', error);
+            showToast('Ошибка при сохранении чата', 'error');
+        }
+    }
+    
+    // Copy chat link
+    function copyChatLink() {
+        const linkInput = document.getElementById('viewChatLink');
+        linkInput.select();
+        document.execCommand('copy');
+        showToast('Ссылка скопирована!', 'success');
+    }
+    
+    // Open photo modal from view modal
+    function openPhotoModalFromView() {
+        const chatId = document.getElementById('viewChatId').value;
+        const chatTgId = document.getElementById('viewChatTgId').value;
+        const chatName = document.getElementById('viewChatName').value;
+        
+        openPhotoModal(chatId, chatTgId, chatName);
+        
+        // When photo modal closes, reload view modal data
+        const photoModalEl = document.getElementById('photoModal');
+        photoModalEl.addEventListener('hidden.bs.modal', function handler() {
+            if (currentViewChatData) {
+                // Reload the view modal with fresh data
+                openViewChatModal(currentViewChatData.id);
+            }
+            photoModalEl.removeEventListener('hidden.bs.modal', handler);
+        }, { once: true });
+    }
+    
+    // Fetch chat photo from view modal
+    async function fetchChatPhotoFromView() {
+        const chatId = document.getElementById('viewChatId').value;
+        
+        try {
+            await fetchChatPhoto(chatId);
+            
+            // Reload view modal with fresh data
+            if (currentViewChatData) {
+                setTimeout(() => {
+                    openViewChatModal(currentViewChatData.id);
+                }, 1000);
+            }
+        } catch (error) {
+            console.error('Error fetching chat photo from view:', error);
+        }
+    }
+    
     // Check authentication and initialize
     if (!getToken()) {
         window.location.href = '/';
     } else {
         chatModal = new bootstrap.Modal(document.getElementById('chatModal'));
         photoModal = new bootstrap.Modal(document.getElementById('photoModal'));
+        viewChatModal = new bootstrap.Modal(document.getElementById('viewChatModal'));
         loadChats();
     }
 </script>
