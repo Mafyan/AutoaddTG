@@ -1858,8 +1858,15 @@ async def api_delete_admin(
 # ==================== ADMIN LOGS PAGE & API ====================
 
 @router.get("/admin-logs", response_class=HTMLResponse)
-async def admin_logs_page(request: Request):
-    """Admin logs page (hidden, accessible only by direct URL)."""
+async def admin_logs_page(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    """Admin logs page (hidden, accessible only by direct URL). Only main admin can access."""
+    # Check if current user is the main admin
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only main admin can access admin logs"
+        )
+    
     return templates.TemplateResponse("admin_logs.html", {"request": request})
 
 @router.get("/api/admin-logs")
@@ -1872,7 +1879,14 @@ async def api_get_admin_logs(
     logs_db: Session = Depends(get_logs_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
-    """Get admin logs with pagination and filters."""
+    """Get admin logs with pagination and filters. Only main admin can access."""
+    # Check if current user is the main admin
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only main admin can access admin logs"
+        )
+    
     try:
         # Get logs with filters
         logs = get_admin_logs(
@@ -1916,7 +1930,14 @@ async def api_get_log_filters(
     logs_db: Session = Depends(get_logs_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
-    """Get available filter options for logs."""
+    """Get available filter options for logs. Only main admin can access."""
+    # Check if current user is the main admin
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only main admin can access admin logs"
+        )
+    
     try:
         admin_names = get_unique_admin_names_from_logs(logs_db)
         actions = get_unique_actions_from_logs(logs_db)
@@ -1938,12 +1959,19 @@ async def api_export_admin_logs(
     logs_db: Session = Depends(get_logs_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
-    """Export admin logs to CSV or JSON."""
+    """Export admin logs to CSV or JSON. Only main admin can access."""
     from fastapi.responses import StreamingResponse
     import io
     import csv
     import json
     from admin_panel.logger_helper import log_admin_action, AdminAction
+    
+    # Check if current user is the main admin
+    if current_admin.username != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only main admin can access admin logs"
+        )
     
     try:
         # Log the export action
