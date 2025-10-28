@@ -1088,31 +1088,42 @@ async def api_update_group_chats(
 ):
     """Assign chats to a role group."""
     from database.crud import get_role_group_by_id, get_chat_by_id
+    from database.models import group_chats
+    from sqlalchemy import delete, insert
     
     group = get_role_group_by_id(db, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Role group not found")
     
     try:
-        # Get all chat objects and collect IDs before commit
-        chats = []
-        chat_ids_to_return = []
+        # Validate that all chat IDs exist
+        valid_chat_ids = []
         for chat_id in data.chat_ids:
             chat = get_chat_by_id(db, chat_id)
             if chat:
-                chats.append(chat)
-                chat_ids_to_return.append(chat.id)
+                valid_chat_ids.append(chat_id)
         
-        # Update group's chats
-        group.chats = chats
+        # Delete existing associations
+        db.execute(delete(group_chats).where(group_chats.c.group_id == group_id))
+        
+        # Insert new associations
+        if valid_chat_ids:
+            for chat_id in valid_chat_ids:
+                db.execute(
+                    insert(group_chats).values(
+                        group_id=group_id,
+                        chat_id=chat_id
+                    )
+                )
+        
         db.commit()
         
-        logger.info(f"Admin {current_admin.username} assigned {len(chats)} chats to group {group_id}")
+        logger.info(f"Admin {current_admin.username} assigned {len(valid_chat_ids)} chats to group {group_id}")
         
         return {
             "status": "success",
-            "message": f"Assigned {len(chats)} chats to group",
-            "chat_ids": chat_ids_to_return
+            "message": f"Assigned {len(valid_chat_ids)} chats to group",
+            "chat_ids": valid_chat_ids
         }
     except Exception as e:
         db.rollback()
