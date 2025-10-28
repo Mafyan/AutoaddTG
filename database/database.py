@@ -4,6 +4,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from config import settings
+import os
+
+# ==================== MAIN DATABASE ====================
 
 # Create engine with optimized pool settings
 engine_kwargs = {
@@ -39,6 +42,54 @@ def get_db():
         Session: SQLAlchemy database session
     """
     db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ==================== LOGS DATABASE (SEPARATE) ====================
+
+# Determine logs database URL
+if "sqlite" in settings.DATABASE_URL:
+    # For SQLite, create separate file
+    base_dir = settings.BASE_DIR
+    LOGS_DATABASE_URL = f"sqlite:///{base_dir}/admin_logs.db"
+else:
+    # For other databases, use separate database name
+    # Example: postgresql://user:pass@localhost/logs_db
+    LOGS_DATABASE_URL = os.getenv("LOGS_DATABASE_URL", settings.DATABASE_URL.replace("/usercontrol", "/admin_logs"))
+
+# Create separate engine for logs
+logs_engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,
+}
+
+if "sqlite" in LOGS_DATABASE_URL:
+    logs_engine_kwargs["connect_args"] = {"check_same_thread": False}
+    logs_engine_kwargs["poolclass"] = StaticPool
+else:
+    logs_engine_kwargs["pool_size"] = 10
+    logs_engine_kwargs["max_overflow"] = 20
+    logs_engine_kwargs["pool_timeout"] = 30
+    logs_engine_kwargs["pool_recycle"] = 3600
+
+logs_engine = create_engine(LOGS_DATABASE_URL, **logs_engine_kwargs)
+
+# Session factory for logs
+LogsSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=logs_engine)
+
+# Base class for logs models
+LogsBase = declarative_base()
+
+def get_logs_db():
+    """
+    Dependency for getting logs database session.
+    
+    Yields:
+        Session: SQLAlchemy logs database session
+    """
+    db = LogsSessionLocal()
     try:
         yield db
     finally:

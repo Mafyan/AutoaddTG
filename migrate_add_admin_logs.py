@@ -1,15 +1,19 @@
-"""Migration to add admin_logs table for tracking admin actions."""
+"""Migration to create separate admin_logs database for tracking admin actions."""
 import sqlite3
-from datetime import datetime
+from pathlib import Path
 
-DATABASE_URL = "sqlite:///./usercontrol.db"
+# Separate database for logs
+LOGS_DB_FILE = "./admin_logs.db"
 
 def migrate():
-    conn = sqlite3.connect(DATABASE_URL.replace("sqlite:///", ""))
+    """Create separate database for admin logs."""
+    print(f"Creating separate logs database: {LOGS_DB_FILE}")
+    
+    conn = sqlite3.connect(LOGS_DB_FILE)
     cursor = conn.cursor()
     
     try:
-        print("Creating 'admin_logs' table...")
+        print("Creating 'admin_logs' table in separate database...")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS admin_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,8 +45,10 @@ def migrate():
         print("[OK] Indexes created successfully!")
         
         conn.commit()
-        print("\n[SUCCESS] Migration completed successfully!")
-        print("Admin logs system is now ready to track all admin actions.")
+        print("\n[SUCCESS] Separate logs database created successfully!")
+        print(f"📁 Database file: {LOGS_DB_FILE}")
+        print("📊 Admin logs will be stored separately from main database")
+        print("✅ This improves performance and allows independent log management")
         
     except Exception as e:
         print(f"[ERROR] Migration failed: {e}")

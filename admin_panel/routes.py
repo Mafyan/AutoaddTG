@@ -12,7 +12,7 @@ import uuid
 import logging
 from pathlib import Path
 
-from database.database import get_db
+from database.database import get_db, get_logs_db
 from database.crud import (
     get_users, get_user_by_id, approve_user, reject_user, delete_user, update_user,
     get_roles, get_role_by_id, create_role, update_role, delete_role, assign_chats_to_role,
@@ -20,7 +20,9 @@ from database.crud import (
     get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users,
     get_user_chats, add_user_to_role_chats, get_user_chat_memberships,
     get_all_admins, get_admin_by_id, create_admin, delete_admin, update_admin_password,
-    get_admin_by_username,
+    get_admin_by_username
+)
+from database.logs_crud import (
     get_admin_logs, count_admin_logs, get_unique_admin_names_from_logs,
     get_unique_actions_from_logs
 )
@@ -1660,14 +1662,14 @@ async def api_get_admin_logs(
     admin_name: Optional[str] = None,
     action: Optional[str] = None,
     search: Optional[str] = None,
-    db: Session = Depends(get_db),
+    logs_db: Session = Depends(get_logs_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Get admin logs with pagination and filters."""
     try:
         # Get logs with filters
         logs = get_admin_logs(
-            db=db,
+            db=logs_db,
             skip=skip,
             limit=limit,
             admin_name=admin_name,
@@ -1677,7 +1679,7 @@ async def api_get_admin_logs(
         
         # Get total count for pagination
         total = count_admin_logs(
-            db=db,
+            db=logs_db,
             admin_name=admin_name,
             action=action,
             search=search
@@ -1704,13 +1706,13 @@ async def api_get_admin_logs(
 
 @router.get("/api/admin-logs/filters")
 async def api_get_log_filters(
-    db: Session = Depends(get_db),
+    logs_db: Session = Depends(get_logs_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Get available filter options for logs."""
     try:
-        admin_names = get_unique_admin_names_from_logs(db)
-        actions = get_unique_actions_from_logs(db)
+        admin_names = get_unique_admin_names_from_logs(logs_db)
+        actions = get_unique_actions_from_logs(logs_db)
         
         return {
             "admin_names": admin_names,
@@ -1726,7 +1728,7 @@ async def api_export_admin_logs(
     admin_name: Optional[str] = None,
     action: Optional[str] = None,
     search: Optional[str] = None,
-    db: Session = Depends(get_db),
+    logs_db: Session = Depends(get_logs_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Export admin logs to CSV or JSON."""
@@ -1739,7 +1741,6 @@ async def api_export_admin_logs(
     try:
         # Log the export action
         log_admin_action(
-            db=db,
             admin=current_admin,
             action=AdminAction.EXPORT_LOGS,
             details=f"Format: {format}, Filters: admin={admin_name}, action={action}, search={search}"
@@ -1747,7 +1748,7 @@ async def api_export_admin_logs(
         
         # Get all matching logs (no pagination for export)
         logs = get_admin_logs(
-            db=db,
+            db=logs_db,
             skip=0,
             limit=10000,  # reasonable limit for export
             admin_name=admin_name,

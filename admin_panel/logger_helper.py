@@ -2,12 +2,12 @@
 from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import Request
-from database.crud import create_admin_log
+from database.logs_crud import create_admin_log
+from database.database import LogsSessionLocal
 from database.models import Admin
 
 
 def log_admin_action(
-    db: Session,
     admin: Admin,
     action: str,
     target: Optional[str] = None,
@@ -15,10 +15,9 @@ def log_admin_action(
     request: Optional[Request] = None
 ):
     """
-    Log an admin action to the database.
+    Log an admin action to the separate logs database.
     
     Args:
-        db: Database session
         admin: Admin object who performed the action
         action: Type of action (e.g., "Создание пользователя", "Блокировка пользователя")
         target: Target of the action (e.g., "user_id:52")
@@ -35,9 +34,11 @@ def log_admin_action(
         else:
             ip_address = request.client.host if request.client else None
     
+    # Use separate logs database session
+    logs_db = LogsSessionLocal()
     try:
         create_admin_log(
-            db=db,
+            db=logs_db,
             admin_name=admin.username,
             admin_id=admin.id,
             action=action,
@@ -48,6 +49,8 @@ def log_admin_action(
     except Exception as e:
         # Don't fail the main action if logging fails
         print(f"Warning: Failed to log admin action: {e}")
+    finally:
+        logs_db.close()
 
 
 # Action type constants for consistency
