@@ -82,14 +82,34 @@ class AdminPasswordUpdate(BaseModel):
 # ==================== AUTHENTICATION ROUTES ====================
 
 @router.post("/api/login")
-async def login(request: LoginRequest, db: Session = Depends(get_db)):
+async def login(login_request: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """Admin login endpoint."""
-    admin = authenticate_admin(request.username, request.password, db)
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
+    admin = authenticate_admin(login_request.username, login_request.password, db)
     if not admin:
+        # Log failed login attempt
+        # Create a temporary admin object for logging
+        from database.models import Admin as AdminModel
+        temp_admin = AdminModel(id=0, username=login_request.username)
+        log_admin_action(
+            admin=temp_admin,
+            action=AdminAction.LOGIN_FAILED,
+            details=f"Failed login attempt for username: {login_request.username}",
+            request=request
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
         )
+    
+    # Log successful login
+    log_admin_action(
+        admin=admin,
+        action=AdminAction.LOGIN,
+        details="Successful login",
+        request=request
+    )
     
     access_token = create_access_token(data={"sub": admin.username})
     return {"access_token": access_token, "token_type": "bearer"}
@@ -322,15 +342,19 @@ async def api_reject_request(
 async def api_update_user(
     user_id: int,
     user_update: UserUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Update user."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
     # Get user BEFORE update to check if role changed
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    old_status = user.status
     old_role_id = user.role_id
     new_role_id = user_update.role_id
     
@@ -466,15 +490,51 @@ async def api_update_user(
             import traceback
             traceback.print_exc()
     
+    # Log the action
+    details_parts = []
+    if user_update.status and old_status != user_update.status:
+        if user_update.status == 'approved':
+            action = AdminAction.USER_APPROVE
+            details_parts.append(f"Статус: {old_status} → {user_update.status}")
+        elif user_update.status == 'rejected':
+            action = AdminAction.USER_REJECT
+            details_parts.append(f"Статус: {old_status} → {user_update.status}")
+        else:
+            action = AdminAction.USER_EDIT
+            details_parts.append(f"Статус: {old_status} → {user_update.status}")
+    else:
+        action = AdminAction.USER_EDIT
+    
+    if role_changed:
+        old_role_name = get_role_by_id(db, old_role_id).name if old_role_id else "Нет"
+        new_role_name = get_role_by_id(db, new_role_id).name if new_role_id else "Нет"
+        details_parts.append(f"Роль: {old_role_name} → {new_role_name}")
+    
+    if user_update.first_name:
+        details_parts.append(f"Имя: {user_update.first_name}")
+    if user_update.last_name:
+        details_parts.append(f"Фамилия: {user_update.last_name}")
+    
+    log_admin_action(
+        admin=current_admin,
+        action=action,
+        target=f"user_id:{user_id}",
+        details=f"{user.first_name} {user.last_name or ''} ({user.phone_number}). " + ", ".join(details_parts),
+        request=request
+    )
+    
     return {"status": "success", "message": "User updated"}
 
 @router.post("/api/users/{user_id}/fire")
 async def api_fire_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Fire user and remove from all chats."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
     # ✅ FIX: Get user and active chats BEFORE firing
     user = get_user_by_id(db, user_id)
     if not user:
@@ -543,6 +603,15 @@ async def api_fire_user(
             print(f"ERROR: Failed to remove user from chats or send notification: {e}")
             import traceback
             traceback.print_exc()
+    
+    # Log the action
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.USER_FIRE,
+        target=f"user_id:{user_id}",
+        details=f"Уволен пользователь: {user.first_name} {user.last_name or ''} ({user.phone_number}). Удален из {len(active_chat_ids)} чатов.",
+        request=request
+    )
     
     return {"status": "success", "message": "User fired and removed from all chats"}
 
@@ -1168,21 +1237,44 @@ async def api_get_roles(
 @router.post("/api/roles")
 async def api_create_role(
     role: RoleCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Create new role."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    from database.crud import get_role_group_by_id
+    
     new_role = create_role(db, name=role.name, description=role.description, group_id=role.group_id)
+    
+    # Log the action
+    if role.group_id:
+        group = get_role_group_by_id(db, role.group_id)
+        group_name = group.name if group else "Без группы"
+    else:
+        group_name = "Без группы"
+        
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.ROLE_CREATE,
+        target=f"role_id:{new_role.id}",
+        details=f"Создана роль: {role.name}. Группа: {group_name}",
+        request=request
+    )
+    
     return {"status": "success", "role_id": new_role.id}
 
 @router.put("/api/roles/{role_id}")
 async def api_update_role(
     role_id: int,
     role_update: RoleUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Update role."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
     update_data = role_update.model_dump(exclude_unset=True)
     chat_ids = update_data.pop('chat_ids', None)
     
@@ -1190,8 +1282,19 @@ async def api_update_role(
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
     
+    details_parts = [f"Роль: {role.name}"]
     if chat_ids is not None:
         assign_chats_to_role(db, role_id, chat_ids)
+        details_parts.append(f"Привязано чатов: {len(chat_ids)}")
+    
+    # Log the action
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.ROLE_EDIT,
+        target=f"role_id:{role_id}",
+        details=". ".join(details_parts),
+        request=request
+    )
     
     return {"status": "success", "message": "Role updated"}
 
@@ -1227,11 +1330,26 @@ async def api_get_role_available_chats(
 @router.delete("/api/roles/{role_id}")
 async def api_delete_role(
     role_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Delete role."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
+    # Get role name before deletion
+    role = get_role_by_id(db, role_id)
+    role_name = role.name if role else f"ID:{role_id}"
+    
     if delete_role(db, role_id):
+        # Log the action
+        log_admin_action(
+            admin=current_admin,
+            action=AdminAction.ROLE_DELETE,
+            target=f"role_id:{role_id}",
+            details=f"Удалена роль: {role_name}",
+            request=request
+        )
         return {"status": "success", "message": "Role deleted"}
     raise HTTPException(status_code=404, detail="Role not found")
 
