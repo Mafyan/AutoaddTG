@@ -432,12 +432,39 @@
         loadLogs();
     });
     
+    // Check if current admin is main admin
+    async function checkAdminAccess() {
+        try {
+            const response = await apiRequest('/api/current-admin');
+            const admin = await response.json();
+            
+            // Only allow access for main admin (username = "admin")
+            if (admin.username !== 'admin') {
+                alert('Доступ запрещен. Только главный администратор может просматривать логи.');
+                window.location.href = '/dashboard';
+                return false;
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Error checking admin access:', error);
+            alert('Ошибка при проверке прав доступа');
+            window.location.href = '/dashboard';
+            return false;
+        }
+    }
+    
     // Initialize
     if (!getToken()) {
         window.location.href = '/';
     } else {
-        loadFilters();
-        loadLogs();
+        // Check access first, then load data
+        checkAdminAccess().then(hasAccess => {
+            if (hasAccess) {
+                loadFilters();
+                loadLogs();
+            }
+        });
     }
 </script>
 {% endblock %}

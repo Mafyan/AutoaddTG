@@ -1858,15 +1858,9 @@ async def api_delete_admin(
 # ==================== ADMIN LOGS PAGE & API ====================
 
 @router.get("/admin-logs", response_class=HTMLResponse)
-async def admin_logs_page(request: Request, current_admin: Admin = Depends(get_current_admin)):
+async def admin_logs_page(request: Request):
     """Admin logs page (hidden, accessible only by direct URL). Only main admin can access."""
-    # Check if current user is the main admin
-    if current_admin.username != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only main admin can access admin logs"
-        )
-    
+    # Note: Authorization is checked on client-side via JavaScript
     return templates.TemplateResponse("admin_logs.html", {"request": request})
 
 @router.get("/api/admin-logs")
