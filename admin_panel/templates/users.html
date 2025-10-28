@@ -2,6 +2,198 @@
 
 {% block title %}Пользователи{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Search Wrapper Styling */
+    .search-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
+    .search-icon {
+        position: absolute;
+        left: 15px;
+        color: #6c757d;
+        font-size: 1.1rem;
+        pointer-events: none;
+        z-index: 10;
+        transition: color 0.3s ease;
+    }
+    
+    .search-input {
+        padding-left: 45px;
+        padding-right: 40px;
+        height: 45px;
+        border-radius: 12px;
+        border: 2px solid #e0e0e0;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .search-input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+        transform: translateY(-2px);
+    }
+    
+    .search-input:focus + .btn + .search-icon {
+        color: #667eea;
+    }
+    
+    .search-clear {
+        position: absolute;
+        right: 10px;
+        padding: 5px;
+        color: #6c757d;
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+    
+    .search-clear:hover {
+        color: #dc3545;
+    }
+    
+    /* Filter Select Styling */
+    .filter-select {
+        height: 45px;
+        border-radius: 12px;
+        border: 2px solid #e0e0e0;
+        transition: all 0.3s ease;
+    }
+    
+    .filter-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+    }
+    
+    /* Active Filter Badges */
+    .filter-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 12px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        animation: fadeIn 0.3s ease;
+    }
+    
+    .filter-badge .remove-filter {
+        cursor: pointer;
+        margin-left: 5px;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+    
+    .filter-badge .remove-filter:hover {
+        opacity: 1;
+    }
+    
+    /* Table Row Animation */
+    .user-row {
+        animation: fadeIn 0.3s ease;
+        transition: all 0.2s ease;
+    }
+    
+    .user-row.filtering-out {
+        animation: fadeOut 0.3s ease;
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeOut {
+        from {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+    }
+    
+    /* No Results Message */
+    .no-results {
+        text-align: center;
+        padding: 60px 20px;
+        animation: fadeIn 0.5s ease;
+    }
+    
+    .no-results i {
+        font-size: 4rem;
+        color: #dee2e6;
+        margin-bottom: 20px;
+    }
+    
+    .no-results h4 {
+        color: #6c757d;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    .no-results p {
+        color: #adb5bd;
+    }
+    
+    /* Loading Shimmer */
+    .shimmer {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+    }
+    
+    @keyframes shimmer {
+        0% {
+            background-position: 200% 0;
+        }
+        100% {
+            background-position: -200% 0;
+        }
+    }
+    
+    /* Results Counter */
+    #resultsInfo {
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+    
+    .results-highlight {
+        color: #667eea;
+        font-weight: 600;
+    }
+    
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+        .search-input {
+            height: 42px;
+            font-size: 16px; /* Prevents zoom on iOS */
+        }
+        
+        .filter-select {
+            height: 42px;
+            font-size: 16px;
+        }
+        
+        .search-wrapper {
+            margin-bottom: 10px;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="sidebar">
     <div class="brand">
@@ -34,19 +226,60 @@
 </div>
 
 <div class="main-content">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2 fw-bold">Пользователи</h1>
-        <div>
-            <select class="form-select d-inline-block w-auto me-2" id="statusFilter" onchange="loadUsers()">
-                <option value="">Все статусы</option>
-                <option value="pending">Ожидают</option>
-                <option value="approved">Одобрено</option>
-                <option value="rejected">Отклонено</option>
-                <option value="fired">Уволено</option>
-            </select>
-            <button class="btn btn-outline-secondary" onclick="loadUsers()">
-                <i class="bi bi-arrow-clockwise"></i> Обновить
-            </button>
+    <div class="mb-4">
+        <h1 class="h2 fw-bold mb-4">Пользователи</h1>
+        
+        <!-- Search and Filters Section -->
+        <div class="row g-3 mb-4">
+            <!-- Intelligent Search -->
+            <div class="col-lg-5">
+                <div class="search-wrapper">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" 
+                           class="form-control search-input" 
+                           id="searchInput" 
+                           placeholder="Поиск по имени или номеру телефона..." 
+                           autocomplete="off">
+                    <button class="btn btn-link search-clear" id="clearSearch" style="display: none;" onclick="clearSearch()">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Status Filter -->
+            <div class="col-lg-3 col-md-4">
+                <select class="form-select filter-select" id="statusFilter">
+                    <option value="">Все статусы</option>
+                    <option value="pending">⏳ Ожидают</option>
+                    <option value="approved">✅ Одобрено</option>
+                    <option value="rejected">❌ Отклонено</option>
+                    <option value="fired">👋 Уволено</option>
+                </select>
+            </div>
+            
+            <!-- Sort by Name -->
+            <div class="col-lg-3 col-md-4">
+                <select class="form-select filter-select" id="sortFilter">
+                    <option value="default">По дате добавления</option>
+                    <option value="name_asc">По имени (А-Я)</option>
+                    <option value="name_desc">По имени (Я-А)</option>
+                </select>
+            </div>
+            
+            <!-- Refresh Button -->
+            <div class="col-lg-1 col-md-4">
+                <button class="btn btn-outline-secondary w-100" onclick="loadUsers()" title="Обновить">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Results Info -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div id="resultsInfo" class="text-muted small">
+                <i class="bi bi-info-circle"></i> Загрузка...
+            </div>
+            <div id="activeFilters" class="d-flex gap-2 flex-wrap"></div>
         </div>
     </div>
     
@@ -142,27 +375,87 @@
         }
     }
     
+    // Global variables for filtering
+    let allUsers = [];
+    let filteredUsers = [];
+    
     async function loadUsers() {
         try {
-            const statusFilter = document.getElementById('statusFilter').value;
-            const url = statusFilter ? `/api/users?status=${statusFilter}` : '/api/users';
+            const response = await apiRequest('/api/users');
+            allUsers = await response.json();
+            filteredUsers = [...allUsers];
             
-            const response = await apiRequest(url);
-            const users = await response.json();
-            
-            const container = document.getElementById('usersTable');
-            
-            if (users.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center py-5">
-                        <i class="bi bi-people" style="font-size: 4rem; color: #dee2e6;"></i>
-                        <p class="text-muted mt-3">Нет пользователей</p>
-                    </div>
-                `;
-                return;
+            applyFilters();
+            setupSearchListeners();
+        } catch (error) {
+            console.error('Error loading users:', error);
+            showToast('Ошибка при загрузке пользователей', 'error');
+        }
+    }
+    
+    function applyFilters() {
+        const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
+        const statusFilter = document.getElementById('statusFilter').value;
+        const sortFilter = document.getElementById('sortFilter').value;
+        
+        // Filter users
+        filteredUsers = allUsers.filter(user => {
+            // Search filter
+            if (searchQuery) {
+                const fullName = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
+                const phone = (user.phone_number || '').replace(/\s+/g, '');
+                const searchNormalized = searchQuery.replace(/\s+/g, '');
+                
+                const matchesSearch = fullName.includes(searchQuery) || 
+                                     phone.includes(searchNormalized) ||
+                                     (user.username || '').toLowerCase().includes(searchQuery);
+                
+                if (!matchesSearch) return false;
             }
             
-            const statusBadge = (status) => {
+            // Status filter
+            if (statusFilter && user.status !== statusFilter) {
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Sort users
+        if (sortFilter === 'name_asc') {
+            filteredUsers.sort((a, b) => {
+                const nameA = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
+                const nameB = `${b.first_name || ''} ${b.last_name || ''}`.toLowerCase();
+                return nameA.localeCompare(nameB, 'ru');
+            });
+        } else if (sortFilter === 'name_desc') {
+            filteredUsers.sort((a, b) => {
+                const nameA = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
+                const nameB = `${b.first_name || ''} ${b.last_name || ''}`.toLowerCase();
+                return nameB.localeCompare(nameA, 'ru');
+            });
+        }
+        
+        renderUsers();
+        updateResultsInfo();
+        updateActiveFilters();
+    }
+    
+    function renderUsers() {
+        const container = document.getElementById('usersTable');
+        
+        if (filteredUsers.length === 0) {
+            container.innerHTML = `
+                <div class="no-results">
+                    <i class="bi bi-search"></i>
+                    <h4>Пользователи не найдены</h4>
+                    <p>Попробуйте изменить параметры поиска или фильтры</p>
+                </div>
+            `;
+            return;
+        }
+        
+        const statusBadge = (status) => {
                 const badges = {
                     'pending': '<span class="badge badge-pending">Ожидает</span>',
                     'approved': '<span class="badge badge-approved">Одобрено</span>',
@@ -189,8 +482,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${users.map(user => `
-                                <tr>
+                            ${filteredUsers.map(user => `
+                                <tr class="user-row">
                                     <td><strong>${user.id}</strong></td>
                                     <td><strong>${user.first_name || ''} ${user.last_name || ''}</strong></td>
                                     <td>${user.position ? `<span class="badge bg-info text-white">${user.position}</span>` : '<span class="text-muted">-</span>'}</td>
@@ -235,9 +528,102 @@
             `;
             
             container.innerHTML = tableHtml;
-        } catch (error) {
-            console.error('Error loading users:', error);
+    }
+    
+    function setupSearchListeners() {
+        const searchInput = document.getElementById('searchInput');
+        const clearButton = document.getElementById('clearSearch');
+        const statusFilter = document.getElementById('statusFilter');
+        const sortFilter = document.getElementById('sortFilter');
+        
+        // Real-time search with debouncing
+        let searchTimeout;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            
+            // Show/hide clear button
+            clearButton.style.display = this.value ? 'block' : 'none';
+            
+            // Debounce search (300ms delay)
+            searchTimeout = setTimeout(() => {
+                applyFilters();
+            }, 300);
+        });
+        
+        // Status and sort filters
+        statusFilter.addEventListener('change', applyFilters);
+        sortFilter.addEventListener('change', applyFilters);
+    }
+    
+    function clearSearch() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('clearSearch').style.display = 'none';
+        applyFilters();
+    }
+    
+    function updateResultsInfo() {
+        const resultsInfo = document.getElementById('resultsInfo');
+        const total = allUsers.length;
+        const filtered = filteredUsers.length;
+        
+        if (filtered === total) {
+            resultsInfo.innerHTML = `<i class="bi bi-info-circle"></i> Всего пользователей: <span class="results-highlight">${total}</span>`;
+        } else {
+            resultsInfo.innerHTML = `<i class="bi bi-funnel"></i> Найдено: <span class="results-highlight">${filtered}</span> из ${total}`;
         }
+    }
+    
+    function updateActiveFilters() {
+        const activeFilters = document.getElementById('activeFilters');
+        const searchQuery = document.getElementById('searchInput').value.trim();
+        const statusFilter = document.getElementById('statusFilter');
+        const sortFilter = document.getElementById('sortFilter');
+        
+        let badges = [];
+        
+        // Search badge
+        if (searchQuery) {
+            badges.push(`
+                <span class="filter-badge">
+                    <i class="bi bi-search"></i> ${searchQuery}
+                    <span class="remove-filter" onclick="clearSearch()">✕</span>
+                </span>
+            `);
+        }
+        
+        // Status badge
+        if (statusFilter.value) {
+            const statusText = statusFilter.options[statusFilter.selectedIndex].text;
+            badges.push(`
+                <span class="filter-badge">
+                    ${statusText}
+                    <span class="remove-filter" onclick="clearStatusFilter()">✕</span>
+                </span>
+            `);
+        }
+        
+        // Sort badge
+        if (sortFilter.value !== 'default') {
+            const sortText = sortFilter.options[sortFilter.selectedIndex].text;
+            badges.push(`
+                <span class="filter-badge">
+                    <i class="bi bi-sort-alpha-down"></i> ${sortText}
+                    <span class="remove-filter" onclick="clearSortFilter()">✕</span>
+                </span>
+            `);
+        }
+        
+        activeFilters.innerHTML = badges.join('');
+    }
+    
+    function clearStatusFilter() {
+        document.getElementById('statusFilter').value = '';
+        applyFilters();
+    }
+    
+    function clearSortFilter() {
+        document.getElementById('sortFilter').value = 'default';
+        applyFilters();
     }
     
     function openEditModal(userId, firstName, lastName, position, roleId, status) {
