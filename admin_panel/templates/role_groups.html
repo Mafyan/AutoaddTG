@@ -346,11 +346,12 @@
                 alert('Чаты успешно привязаны к группе!');
             } else {
                 const error = await response.json();
-                alert('Ошибка: ' + (error.detail || 'Не удалось сохранить'));
+                console.error('API Error:', error);
+                alert('Ошибка: ' + (error.detail || 'Не удалось сохранить') + '\n\nПроверьте консоль браузера для подробностей.');
             }
         } catch (error) {
             console.error('Error saving group chats:', error);
-            alert('Ошибка при сохранении чатов');
+            alert('Ошибка при сохранении чатов:\n' + error.message + '\n\nПроверьте консоль браузера для подробностей.');
         }
     }
     
