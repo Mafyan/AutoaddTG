@@ -1089,28 +1089,41 @@ async def api_update_group_chats(
     """Assign chats to a role group."""
     from database.crud import get_role_group_by_id, get_chat_by_id
     
-    group = get_role_group_by_id(db, group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Role group not found")
-    
-    # Get all chat objects
-    chats = []
-    for chat_id in data.chat_ids:
-        chat = get_chat_by_id(db, chat_id)
-        if chat:
-            chats.append(chat)
-    
-    # Update group's chats
-    group.chats = chats
-    db.commit()
-    
-    logger.info(f"Admin {current_admin.username} assigned {len(chats)} chats to group {group_id}")
-    
-    return {
-        "status": "success",
-        "message": f"Assigned {len(chats)} chats to group",
-        "chat_ids": [chat.id for chat in chats]
-    }
+    try:
+        group = get_role_group_by_id(db, group_id)
+        if not group:
+            raise HTTPException(status_code=404, detail="Role group not found")
+        
+        # Get all chat objects
+        chats = []
+        for chat_id in data.chat_ids:
+            chat = get_chat_by_id(db, chat_id)
+            if chat:
+                chats.append(chat)
+        
+        # Update group's chats
+        group.chats = chats
+        db.commit()
+        
+        logger.info(f"Admin {current_admin.username} assigned {len(chats)} chats to group {group_id}")
+        
+        return {
+            "status": "success",
+            "message": f"Assigned {len(chats)} chats to group",
+            "chat_ids": [chat.id for chat in chats]
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error assigning chats to group {group_id}: {str(e)}")
+        
+        # Check if it's a database schema error
+        if "no such table: group_chats" in str(e) or "group_chats" in str(e):
+            raise HTTPException(
+                status_code=500, 
+                detail="Database migration required. Please run: python migrate_add_group_chats.py"
+            )
+        
+        raise HTTPException(status_code=500, detail=f"Failed to assign chats: {str(e)}")
 
 # ==================== ROLE API ====================
 

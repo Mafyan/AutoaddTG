@@ -345,9 +345,18 @@
                 loadGroups();
                 alert('Чаты успешно привязаны к группе!');
             } else {
-                const error = await response.json();
-                console.error('API Error:', error);
-                alert('Ошибка: ' + (error.detail || 'Не удалось сохранить') + '\n\nПроверьте консоль браузера для подробностей.');
+                let errorMessage = 'Не удалось сохранить';
+                try {
+                    const error = await response.json();
+                    console.error('API Error:', error);
+                    errorMessage = error.detail || errorMessage;
+                } catch (e) {
+                    // Response is not JSON, try to get text
+                    const errorText = await response.text();
+                    console.error('API Error (non-JSON):', errorText);
+                    errorMessage = errorText || errorMessage;
+                }
+                alert('Ошибка: ' + errorMessage + '\n\nПроверьте консоль браузера для подробностей.');
             }
         } catch (error) {
             console.error('Error saving group chats:', error);
