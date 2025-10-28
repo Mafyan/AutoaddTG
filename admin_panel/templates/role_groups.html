@@ -347,14 +347,20 @@
             } else {
                 let errorMessage = 'Не удалось сохранить';
                 try {
-                    const error = await response.json();
-                    console.error('API Error:', error);
-                    errorMessage = error.detail || errorMessage;
+                    // First get response as text
+                    const responseText = await response.text();
+                    console.error('API Error (raw):', responseText);
+                    
+                    // Try to parse as JSON
+                    try {
+                        const error = JSON.parse(responseText);
+                        errorMessage = error.detail || errorMessage;
+                    } catch (jsonError) {
+                        // Not JSON, use text as is
+                        errorMessage = responseText || errorMessage;
+                    }
                 } catch (e) {
-                    // Response is not JSON, try to get text
-                    const errorText = await response.text();
-                    console.error('API Error (non-JSON):', errorText);
-                    errorMessage = errorText || errorMessage;
+                    console.error('Failed to read response:', e);
                 }
                 alert('Ошибка: ' + errorMessage + '\n\nПроверьте консоль браузера для подробностей.');
             }
