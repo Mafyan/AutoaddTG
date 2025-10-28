@@ -85,6 +85,36 @@
         </div>
     </div>
 </div>
+
+<!-- Chats Management Modal -->
+<div class="modal fade" id="chatsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chatsModalTitle">Управление чатами группы</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="chatsGroupId">
+                <p class="text-muted">
+                    <i class="bi bi-info-circle"></i> Выберите чаты, которые будут доступны для ролей этой группы
+                </p>
+                <div id="chatsCheckboxes" class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ms-2">Загрузка чатов...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveGroupChats()">
+                    <i class="bi bi-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -136,10 +166,18 @@
                                 
                                 <hr>
                                 
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-muted">
+                                <div class="mb-2">
+                                    <small class="text-muted d-block">
                                         <i class="bi bi-person-badge"></i> Ролей: <strong>${group.roles_count}</strong>
                                     </small>
+                                    <small class="text-muted d-block">
+                                        <i class="bi bi-chat-dots"></i> Чатов: <strong>${group.chats_count || 0}</strong>
+                                    </small>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-sm btn-outline-info" onclick="openChatsModal(${group.id}, '${group.name}')">
+                                        <i class="bi bi-chat-dots"></i> Управление чатами
+                                    </button>
                                     <a href="/roles?group=${group.id}" class="btn btn-sm btn-outline-secondary">
                                         <i class="bi bi-arrow-right"></i> Посмотреть роли
                                     </a>
@@ -232,11 +270,96 @@
         }
     }
     
+    // ==================== CHATS MANAGEMENT ====================
+    
+    let chatsModal;
+    let allChats = [];
+    
+    async function openChatsModal(groupId, groupName) {
+        document.getElementById('chatsGroupId').value = groupId;
+        document.getElementById('chatsModalTitle').textContent = `Управление чатами: ${groupName}`;
+        
+        // Load all chats and group's current chats
+        await Promise.all([
+            loadAllChats(),
+            loadGroupChats(groupId)
+        ]);
+        
+        chatsModal.show();
+    }
+    
+    async function loadAllChats() {
+        try {
+            const response = await apiRequest('/api/chats');
+            allChats = await response.json();
+        } catch (error) {
+            console.error('Error loading chats:', error);
+        }
+    }
+    
+    async function loadGroupChats(groupId) {
+        try {
+            const response = await apiRequest(`/api/role-groups/${groupId}/chats`);
+            const groupChats = await response.json();
+            const groupChatIds = groupChats.map(c => c.id);
+            
+            renderChatsCheckboxes(groupChatIds);
+        } catch (error) {
+            console.error('Error loading group chats:', error);
+        }
+    }
+    
+    function renderChatsCheckboxes(selectedChatIds) {
+        const container = document.getElementById('chatsCheckboxes');
+        
+        if (allChats.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center">Нет доступных чатов</p>';
+            return;
+        }
+        
+        container.innerHTML = allChats.map(chat => `
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" value="${chat.id}" 
+                       id="chat${chat.id}" ${selectedChatIds.includes(chat.id) ? 'checked' : ''}>
+                <label class="form-check-label" for="chat${chat.id}">
+                    <strong>${chat.chat_name}</strong>
+                    ${chat.description ? `<br><small class="text-muted">${chat.description}</small>` : ''}
+                </label>
+            </div>
+        `).join('');
+    }
+    
+    async function saveGroupChats() {
+        const groupId = document.getElementById('chatsGroupId').value;
+        const selectedChatIds = Array.from(document.querySelectorAll('#chatsCheckboxes input:checked'))
+            .map(cb => parseInt(cb.value));
+        
+        try {
+            const response = await apiRequest(`/api/role-groups/${groupId}/chats`, {
+                method: 'PUT',
+                body: JSON.stringify({ chat_ids: selectedChatIds })
+            });
+            
+            if (response.ok) {
+                chatsModal.hide();
+                loadGroups();
+                alert('Чаты успешно привязаны к группе!');
+            } else {
+                const error = await response.json();
+                alert('Ошибка: ' + (error.detail || 'Не удалось сохранить'));
+            }
+        } catch (error) {
+            console.error('Error saving group chats:', error);
+            alert('Ошибка при сохранении чатов');
+        }
+    }
+    
     // Check authentication and initialize
     if (!getToken()) {
         window.location.href = '/';
     } else {
         groupModal = new bootstrap.Modal(document.getElementById('groupModal'));
+        chatsModal = new bootstrap.Modal(document.getElementById('chatsModal'));
         loadGroups();
     }
 </script>

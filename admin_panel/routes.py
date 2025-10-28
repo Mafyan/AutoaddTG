@@ -973,7 +973,8 @@ async def api_get_role_groups(
         "name": group.name,
         "description": group.description,
         "created_at": group.created_at.isoformat() if group.created_at else None,
-        "roles_count": len(group.roles) if group.roles else 0
+        "roles_count": len(group.roles) if group.roles else 0,
+        "chats_count": len(group.chats) if group.chats else 0
     } for group in groups]
 
 class RoleGroupCreate(BaseModel):
@@ -1051,6 +1052,66 @@ async def api_delete_role_group(
     delete_role_group(db, group_id)
     return {"status": "success", "message": "Role group deleted"}
 
+# ==================== ROLE GROUP CHATS API ====================
+
+@router.get("/api/role-groups/{group_id}/chats")
+async def api_get_group_chats(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get all chats assigned to a role group."""
+    from database.crud import get_role_group_by_id
+    
+    group = get_role_group_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Role group not found")
+    
+    return [{
+        "id": chat.id,
+        "chat_id": chat.chat_id,
+        "chat_name": chat.chat_name,
+        "chat_link": chat.chat_link,
+        "chat_photo": chat.chat_photo,
+        "description": chat.description
+    } for chat in group.chats]
+
+class GroupChatsUpdate(BaseModel):
+    chat_ids: List[int]
+
+@router.put("/api/role-groups/{group_id}/chats")
+async def api_update_group_chats(
+    group_id: int,
+    data: GroupChatsUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Assign chats to a role group."""
+    from database.crud import get_role_group_by_id, get_chat_by_id
+    
+    group = get_role_group_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Role group not found")
+    
+    # Get all chat objects
+    chats = []
+    for chat_id in data.chat_ids:
+        chat = get_chat_by_id(db, chat_id)
+        if chat:
+            chats.append(chat)
+    
+    # Update group's chats
+    group.chats = chats
+    db.commit()
+    
+    logger.info(f"Admin {current_admin.username} assigned {len(chats)} chats to group {group_id}")
+    
+    return {
+        "status": "success",
+        "message": f"Assigned {len(chats)} chats to group",
+        "chat_ids": [chat.id for chat in chats]
+    }
+
 # ==================== ROLE API ====================
 
 @router.get("/api/roles")
@@ -1099,6 +1160,35 @@ async def api_update_role(
         assign_chats_to_role(db, role_id, chat_ids)
     
     return {"status": "success", "message": "Role updated"}
+
+@router.get("/api/roles/{role_id}/available-chats")
+async def api_get_role_available_chats(
+    role_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get chats available for a role (chats from the role's group)."""
+    role = get_role_by_id(db, role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+    # If role has no group, return all chats
+    if not role.group:
+        chats = get_chats(db)
+        return [{
+            "id": chat.id,
+            "chat_id": chat.chat_id,
+            "chat_name": chat.chat_name,
+            "description": chat.description
+        } for chat in chats]
+    
+    # Return only chats from the role's group
+    return [{
+        "id": chat.id,
+        "chat_id": chat.chat_id,
+        "chat_name": chat.chat_name,
+        "description": chat.description
+    } for chat in role.group.chats]
 
 @router.delete("/api/roles/{role_id}")
 async def api_delete_role(

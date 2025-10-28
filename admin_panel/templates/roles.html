@@ -264,12 +264,25 @@
                 document.getElementById('roleDescription').value = role.description || '';
                 document.getElementById('roleGroupId').value = role.group_id || '';
                 
+                // Load chats available for this role (chats from role's group)
+                await loadRoleAvailableChats(roleId);
+                
                 const chatIds = role.chats.map(c => c.id);
                 renderChatCheckboxes(chatIds);
                 roleModal.show();
             }
         } catch (error) {
             console.error('Error loading role:', error);
+        }
+    }
+    
+    async function loadRoleAvailableChats(roleId) {
+        try {
+            const response = await apiRequest(`/api/roles/${roleId}/available-chats`);
+            allChats = await response.json();
+        } catch (error) {
+            console.error('Error loading available chats:', error);
+            allChats = [];
         }
     }
     

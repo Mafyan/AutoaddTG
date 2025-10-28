@@ -13,6 +13,15 @@ role_chats = Table(
     Column('chat_id', Integer, ForeignKey('chats.id', ondelete='CASCADE'))
 )
 
+# Association table for many-to-many relationship between role groups and chats
+group_chats = Table(
+    'group_chats',
+    Base.metadata,
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('group_id', Integer, ForeignKey('role_groups.id', ondelete='CASCADE')),
+    Column('chat_id', Integer, ForeignKey('chats.id', ondelete='CASCADE'))
+)
+
 class User(Base):
     """User model for storing employee information."""
     
@@ -48,8 +57,9 @@ class RoleGroup(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationship
+    # Relationships
     roles = relationship("Role", back_populates="group")
+    chats = relationship("Chat", secondary=group_chats, back_populates="groups")
     
     def __repr__(self):
         return f"<RoleGroup {self.name}>"
@@ -87,8 +97,9 @@ class Chat(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Relationship
+    # Relationships
     roles = relationship("Role", secondary=role_chats, back_populates="chats")
+    groups = relationship("RoleGroup", secondary=group_chats, back_populates="chats")
     
     def __repr__(self):
         return f"<Chat {self.chat_name}>"
