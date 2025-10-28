@@ -20,7 +20,9 @@ from database.crud import (
     get_chats_by_role, get_statistics, authenticate_admin, fire_user, get_fired_users,
     get_user_chats, add_user_to_role_chats, get_user_chat_memberships,
     get_all_admins, get_admin_by_id, create_admin, delete_admin, update_admin_password,
-    get_admin_by_username
+    get_admin_by_username,
+    get_admin_logs, count_admin_logs, get_unique_admin_names_from_logs,
+    get_unique_actions_from_logs
 )
 from database.models import Admin, ChatMember
 from admin_panel.auth import create_access_token, get_current_admin
@@ -1643,4 +1645,171 @@ async def api_delete_admin(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete administrator: {str(e)}"
         )
+
+# ==================== ADMIN LOGS PAGE & API ====================
+
+@router.get("/admin-logs", response_class=HTMLResponse)
+async def admin_logs_page(request: Request):
+    """Admin logs page (hidden, accessible only by direct URL)."""
+    return templates.TemplateResponse("admin_logs.html", {"request": request})
+
+@router.get("/api/admin-logs")
+async def api_get_admin_logs(
+    skip: int = 0,
+    limit: int = 20,
+    admin_name: Optional[str] = None,
+    action: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get admin logs with pagination and filters."""
+    try:
+        # Get logs with filters
+        logs = get_admin_logs(
+            db=db,
+            skip=skip,
+            limit=limit,
+            admin_name=admin_name,
+            action=action,
+            search=search
+        )
+        
+        # Get total count for pagination
+        total = count_admin_logs(
+            db=db,
+            admin_name=admin_name,
+            action=action,
+            search=search
+        )
+        
+        return {
+            "logs": [{
+                "id": log.id,
+                "timestamp": log.timestamp.isoformat(),
+                "admin_name": log.admin_name,
+                "admin_id": log.admin_id,
+                "action": log.action,
+                "target": log.target,
+                "details": log.details,
+                "ip_address": log.ip_address
+            } for log in logs],
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Error getting admin logs: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get admin logs: {str(e)}")
+
+@router.get("/api/admin-logs/filters")
+async def api_get_log_filters(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Get available filter options for logs."""
+    try:
+        admin_names = get_unique_admin_names_from_logs(db)
+        actions = get_unique_actions_from_logs(db)
+        
+        return {
+            "admin_names": admin_names,
+            "actions": actions
+        }
+    except Exception as e:
+        logger.error(f"Error getting log filters: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get filters: {str(e)}")
+
+@router.get("/api/admin-logs/export")
+async def api_export_admin_logs(
+    format: str = "csv",  # csv or json
+    admin_name: Optional[str] = None,
+    action: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """Export admin logs to CSV or JSON."""
+    from fastapi.responses import StreamingResponse
+    import io
+    import csv
+    import json
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
+    try:
+        # Log the export action
+        log_admin_action(
+            db=db,
+            admin=current_admin,
+            action=AdminAction.EXPORT_LOGS,
+            details=f"Format: {format}, Filters: admin={admin_name}, action={action}, search={search}"
+        )
+        
+        # Get all matching logs (no pagination for export)
+        logs = get_admin_logs(
+            db=db,
+            skip=0,
+            limit=10000,  # reasonable limit for export
+            admin_name=admin_name,
+            action=action,
+            search=search
+        )
+        
+        if format == "csv":
+            # Create CSV
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Write header
+            writer.writerow(['ID', 'Timestamp', 'Admin Name', 'Admin ID', 'Action', 'Target', 'Details', 'IP Address'])
+            
+            # Write data
+            for log in logs:
+                writer.writerow([
+                    log.id,
+                    log.timestamp.strftime('%d.%m.%Y %H:%M:%S'),
+                    log.admin_name,
+                    log.admin_id,
+                    log.action,
+                    log.target or '',
+                    log.details or '',
+                    log.ip_address or ''
+                ])
+            
+            output.seek(0)
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=admin_logs.csv"}
+            )
+        
+        elif format == "json":
+            # Create JSON
+            logs_data = [{
+                "id": log.id,
+                "timestamp": log.timestamp.strftime('%d.%m.%Y %H:%M:%S'),
+                "admin_name": log.admin_name,
+                "admin_id": log.admin_id,
+                "action": log.action,
+                "target": log.target,
+                "details": log.details,
+                "ip_address": log.ip_address
+            } for log in logs]
+            
+            json_str = json.dumps(logs_data, ensure_ascii=False, indent=2)
+            
+            return StreamingResponse(
+                iter([json_str]),
+                media_type="application/json",
+                headers={"Content-Disposition": "attachment; filename=admin_logs.json"}
+            )
+        
+        else:
+            raise HTTPException(status_code=400, detail="Invalid format. Use 'csv' or 'json'")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting admin logs: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to export logs: {str(e)}")
 

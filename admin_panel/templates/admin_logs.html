@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block title %}Логи администраторов{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Search and Filter Styling */
+    .search-wrapper {
+        position: relative;
+    }
+    
+    .search-icon {
+        position: absolute;
+        left: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+        pointer-events: none;
+    }
+    
+    .search-input {
+        padding-left: 45px;
+        height: 45px;
+        border-radius: 12px;
+        border: 2px solid #e0e0e0;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .search-input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+        transform: translateY(-2px);
+    }
+    
+    .filter-select {
+        height: 45px;
+        border-radius: 12px;
+        border: 2px solid #e0e0e0;
+        transition: all 0.3s ease;
+    }
+    
+    .filter-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+    }
+    
+    /* Table Styling */
+    .logs-table {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .logs-table thead th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 600;
+        border: none;
+        padding: 16px;
+    }
+    
+    .logs-table tbody tr {
+        transition: all 0.2s ease;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .logs-table tbody tr:hover {
+        background-color: #f8f9ff;
+        transform: scale(1.01);
+    }
+    
+    .logs-table tbody td {
+        padding: 14px;
+        vertical-align: middle;
+    }
+    
+    /* Badge for actions */
+    .action-badge {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    
+    /* Pagination */
+    .pagination-info {
+        color: #6c757d;
+        font-size: 0.95rem;
+    }
+    
+    /* No results message */
+    .no-logs {
+        text-align: center;
+        padding: 60px 20px;
+        animation: fadeIn 0.5s ease;
+    }
+    
+    .no-logs i {
+        font-size: 4rem;
+        color: #dee2e6;
+        margin-bottom: 20px;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sidebar">
+    <div class="brand">
+        <i class="bi bi-robot"></i> User Control
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="/dashboard">
+            <i class="bi bi-speedometer2"></i> Панель управления
+        </a>
+        <a class="nav-link" href="/requests">
+            <i class="bi bi-person-check"></i> Заявки
+        </a>
+        <a class="nav-link" href="/users">
+            <i class="bi bi-people"></i> Пользователи
+        </a>
+        <a class="nav-link" href="/role-groups">
+            <i class="bi bi-collection"></i> Группы ролей
+        </a>
+        <a class="nav-link" href="/roles">
+            <i class="bi bi-person-badge"></i> Роли
+        </a>
+        <a class="nav-link" href="/chats">
+            <i class="bi bi-chat-dots"></i> Чаты
+        </a>
+        <hr style="border-color: rgba(255,255,255,0.2);">
+        <a class="nav-link" href="#" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Выход
+        </a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2 fw-bold mb-0">
+                <i class="bi bi-journal-text text-primary"></i> Логи администраторов
+            </h1>
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="exportLogs('csv')">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Экспорт CSV
+                </button>
+                <button class="btn btn-info" onclick="exportLogs('json')">
+                    <i class="bi bi-file-earmark-code"></i> Экспорт JSON
+                </button>
+                <button class="btn btn-outline-secondary" onclick="loadLogs()">
+                    <i class="bi bi-arrow-clockwise"></i> Обновить
+                </button>
+            </div>
+        </div>
+        
+        <!-- Search and Filters -->
+        <div class="row g-3 mb-4">
+            <div class="col-lg-5">
+                <div class="search-wrapper">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" 
+                           class="form-control search-input" 
+                           id="searchInput" 
+                           placeholder="Поиск по логам..." 
+                           autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-4">
+                <select class="form-select filter-select" id="adminFilter">
+                    <option value="">Все администраторы</option>
+                </select>
+            </div>
+            <div class="col-lg-3 col-md-4">
+                <select class="form-select filter-select" id="actionFilter">
+                    <option value="">Все действия</option>
+                </select>
+            </div>
+            <div class="col-lg-1 col-md-4">
+                <button class="btn btn-outline-secondary w-100" onclick="clearFilters()" style="height: 45px;">
+                    <i class="bi bi-x-circle"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Pagination Info -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <span class="pagination-info" id="paginationInfo">Загрузка...</span>
+            <div class="btn-group" id="paginationControls">
+                <button class="btn btn-sm btn-outline-primary" onclick="prevPage()" id="prevBtn" disabled>
+                    <i class="bi bi-chevron-left"></i> Предыдущая
+                </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="nextPage()" id="nextBtn" disabled>
+                    Следующая <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Logs Table -->
+        <div class="logs-table">
+            <table class="table table-hover mb-0" id="logsTable">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">ID</th>
+                        <th style="width: 12%;">Дата/Время</th>
+                        <th style="width: 12%;">Администратор</th>
+                        <th style="width: 18%;">Действие</th>
+                        <th style="width: 10%;">Объект</th>
+                        <th style="width: 28%;">Детали</th>
+                        <th style="width: 15%;">IP-адрес</th>
+                    </tr>
+                </thead>
+                <tbody id="logsBody">
+                    <tr>
+                        <td colspan="7" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Загрузка...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPage = 0;
+    const logsPerPage = 20;
+    let totalLogs = 0;
+    let currentFilters = {
+        search: '',
+        admin: '',
+        action: ''
+    };
+    
+    // Load logs with current filters and pagination
+    async function loadLogs() {
+        try {
+            const params = new URLSearchParams({
+                skip: currentPage * logsPerPage,
+                limit: logsPerPage
+            });
+            
+            if (currentFilters.admin) params.append('admin_name', currentFilters.admin);
+            if (currentFilters.action) params.append('action', currentFilters.action);
+            if (currentFilters.search) params.append('search', currentFilters.search);
+            
+            const response = await apiRequest(`/api/admin-logs?${params}`);
+            const data = await response.json();
+            
+            totalLogs = data.total;
+            renderLogs(data.logs);
+            updatePaginationInfo();
+            updatePaginationButtons();
+        } catch (error) {
+            console.error('Error loading logs:', error);
+            document.getElementById('logsBody').innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-danger py-4">
+                        Ошибка при загрузке логов
+                    </td>
+                </tr>
+            `;
+        }
+    }
+    
+    // Load filter options
+    async function loadFilters() {
+        try {
+            const response = await apiRequest('/api/admin-logs/filters');
+            const data = await response.json();
+            
+            // Populate admin filter
+            const adminFilter = document.getElementById('adminFilter');
+            adminFilter.innerHTML = '<option value="">Все администраторы</option>';
+            data.admin_names.forEach(name => {
+                adminFilter.innerHTML += `<option value="${name}">${name}</option>`;
+            });
+            
+            // Populate action filter
+            const actionFilter = document.getElementById('actionFilter');
+            actionFilter.innerHTML = '<option value="">Все действия</option>';
+            data.actions.forEach(action => {
+                actionFilter.innerHTML += `<option value="${action}">${action}</option>`;
+            });
+        } catch (error) {
+            console.error('Error loading filters:', error);
+        }
+    }
+    
+    // Render logs table
+    function renderLogs(logs) {
+        const tbody = document.getElementById('logsBody');
+        
+        if (logs.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7">
+                        <div class="no-logs">
+                            <i class="bi bi-inbox"></i>
+                            <h4>Логов пока нет</h4>
+                            <p class="text-muted">Действия администраторов будут отображаться здесь</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        tbody.innerHTML = logs.map(log => `
+            <tr>
+                <td><strong>#${log.id}</strong></td>
+                <td>
+                    <div style="line-height: 1.4;">
+                        <div>${formatDate(log.timestamp)}</div>
+                        <small class="text-muted">${formatTime(log.timestamp)}</small>
+                    </div>
+                </td>
+                <td><span class="badge bg-secondary">${log.admin_name}</span></td>
+                <td><span class="action-badge bg-primary">${log.action}</span></td>
+                <td>${log.target ? `<code>${log.target}</code>` : '<span class="text-muted">—</span>'}</td>
+                <td><small>${log.details || '<span class="text-muted">—</span>'}</small></td>
+                <td><small class="text-muted">${log.ip_address || '—'}</small></td>
+            </tr>
+        `).join('');
+    }
+    
+    // Format date
+    function formatDate(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleDateString('ru-RU');
+    }
+    
+    // Format time
+    function formatTime(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+    }
+    
+    // Update pagination info
+    function updatePaginationInfo() {
+        const start = currentPage * logsPerPage + 1;
+        const end = Math.min((currentPage + 1) * logsPerPage, totalLogs);
+        document.getElementById('paginationInfo').textContent = 
+            totalLogs > 0 
+                ? `Показано ${start}–${end} из ${totalLogs} записей`
+                : 'Нет записей';
+    }
+    
+    // Update pagination buttons
+    function updatePaginationButtons() {
+        document.getElementById('prevBtn').disabled = currentPage === 0;
+        document.getElementById('nextBtn').disabled = (currentPage + 1) * logsPerPage >= totalLogs;
+    }
+    
+    // Pagination functions
+    function nextPage() {
+        if ((currentPage + 1) * logsPerPage < totalLogs) {
+            currentPage++;
+            loadLogs();
+        }
+    }
+    
+    function prevPage() {
+        if (currentPage > 0) {
+            currentPage--;
+            loadLogs();
+        }
+    }
+    
+    // Clear filters
+    function clearFilters() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('adminFilter').value = '';
+        document.getElementById('actionFilter').value = '';
+        currentFilters = { search: '', admin: '', action: '' };
+        currentPage = 0;
+        loadLogs();
+    }
+    
+    // Export logs
+    async function exportLogs(format) {
+        try {
+            const params = new URLSearchParams({ format });
+            
+            if (currentFilters.admin) params.append('admin_name', currentFilters.admin);
+            if (currentFilters.action) params.append('action', currentFilters.action);
+            if (currentFilters.search) params.append('search', currentFilters.search);
+            
+            window.location.href = `/api/admin-logs/export?${params}`;
+        } catch (error) {
+            console.error('Error exporting logs:', error);
+            alert('Ошибка при экспорте логов');
+        }
+    }
+    
+    // Setup event listeners
+    let searchTimeout;
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            currentFilters.search = e.target.value.trim();
+            currentPage = 0;
+            loadLogs();
+        }, 500);
+    });
+    
+    document.getElementById('adminFilter').addEventListener('change', (e) => {
+        currentFilters.admin = e.target.value;
+        currentPage = 0;
+        loadLogs();
+    });
+    
+    document.getElementById('actionFilter').addEventListener('change', (e) => {
+        currentFilters.action = e.target.value;
+        currentPage = 0;
+        loadLogs();
+    });
+    
+    // Initialize
+    if (!getToken()) {
+        window.location.href = '/';
+    } else {
+        loadFilters();
+        loadLogs();
+    }
+</script>
+{% endblock %}
+
