@@ -76,9 +76,10 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Группа</label>
-                        <select class="form-select" id="roleGroupId">
+                        <select class="form-select" id="roleGroupId" onchange="onGroupChange()">
                             <option value="">Без группы</option>
                         </select>
+                        <small class="text-muted">При выборе группы будут показаны только чаты, привязанные к этой группе</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Привязанные чаты</label>
@@ -245,7 +246,8 @@
         document.getElementById('roleGroupId').value = '';
         
         await loadRoleGroups();
-        renderChatCheckboxes([]);
+        // Load all chats since no group is selected
+        await loadChatsForGroup('');
         roleModal.show();
     }
     
@@ -284,6 +286,33 @@
             console.error('Error loading available chats:', error);
             allChats = [];
         }
+    }
+    
+    async function loadChatsForGroup(groupId) {
+        try {
+            if (!groupId) {
+                // If no group selected, load all chats
+                const response = await apiRequest('/api/chats');
+                allChats = await response.json();
+            } else {
+                // Load only chats for the selected group
+                const response = await apiRequest(`/api/role-groups/${groupId}/chats`);
+                allChats = await response.json();
+            }
+            // Re-render checkboxes with current selection
+            const currentSelection = Array.from(document.querySelectorAll('#chatsCheckboxes input:checked'))
+                .map(cb => parseInt(cb.value));
+            renderChatCheckboxes(currentSelection);
+        } catch (error) {
+            console.error('Error loading chats for group:', error);
+            allChats = [];
+            renderChatCheckboxes([]);
+        }
+    }
+    
+    function onGroupChange() {
+        const groupId = document.getElementById('roleGroupId').value;
+        loadChatsForGroup(groupId);
     }
     
     function renderChatCheckboxes(selectedChatIds) {
