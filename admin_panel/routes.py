@@ -618,10 +618,13 @@ async def api_fire_user(
 @router.post("/api/users/{user_id}/reset-link-cooldown")
 async def api_reset_link_cooldown(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Reset user's link request cooldown (allows immediate link request)."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -631,6 +634,15 @@ async def api_reset_link_cooldown(
     db.commit()
     
     logger.info(f"Admin {current_admin.username} reset link cooldown for user {user_id}")
+    
+    # Log the action
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.USER_RESET_COOLDOWN,
+        target=f"user_id:{user_id}",
+        details=f"Сброшено ограничение на запрос ссылок для: {user.first_name} {user.last_name or ''} ({user.phone_number})",
+        request=request
+    )
     
     # Send notification to user if they have telegram_id
     if user.telegram_id and settings.BOT_TOKEN:
@@ -908,10 +920,13 @@ async def api_debug_role_chat_connections(
 @router.post("/api/users/{user_id}/rehire")
 async def api_rehire_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Rehire user (restore access)."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
     user = update_user(db, user_id, status='approved')
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -956,15 +971,28 @@ async def api_rehire_user(
         except TelegramError as e:
             print(f"Failed to send notification: {e}")
     
+    # Log the action
+    role_name = user.role.name if user.role else "Нет роли"
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.USER_RESTORE,
+        target=f"user_id:{user_id}",
+        details=f"Восстановлен пользователь: {user.first_name} {user.last_name or ''} ({user.phone_number}). Роль: {role_name}",
+        request=request
+    )
+    
     return {"status": "success", "message": "User rehired"}
 
 @router.delete("/api/users/{user_id}")
 async def api_delete_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Delete user completely (including from Telegram chats). Only 'admin' account can delete users."""
+    from admin_panel.logger_helper import log_admin_action, AdminAction
+    
     # Check if current admin is the main admin account
     if current_admin.username != "admin":
         raise HTTPException(
@@ -976,6 +1004,10 @@ async def api_delete_user(
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    # Save user info for logging
+    user_name = f"{user.first_name} {user.last_name or ''}"
+    user_phone = user.phone_number
     
     # Get active chats BEFORE deletion
     # Use role-based chats instead of chat_members table (more reliable)
@@ -1031,6 +1063,15 @@ async def api_delete_user(
             except Exception as e:
                 print(f"ERROR: Failed to remove deleted user from chats: {e}")
         
+        # Log the action
+        log_admin_action(
+            admin=current_admin,
+            action=AdminAction.USER_DELETE,
+            target=f"user_id:{user_id}",
+            details=f"Удален пользователь: {user_name} ({user_phone}). Удален из {len(active_chat_ids)} чатов.",
+            request=request
+        )
+        
         return {"status": "success", "message": "User deleted and removed from all chats"}
     
     raise HTTPException(status_code=404, detail="User not found")
@@ -1061,11 +1102,13 @@ class RoleGroupCreate(BaseModel):
 @router.post("/api/role-groups")
 async def api_create_role_group(
     group_data: RoleGroupCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Create a new role group."""
     from database.crud import create_role_group, get_role_group_by_name
+    from admin_panel.logger_helper import log_admin_action, AdminAction
     
     # Check if group with same name already exists
     existing = get_role_group_by_name(db, group_data.name)
@@ -1073,6 +1116,16 @@ async def api_create_role_group(
         raise HTTPException(status_code=400, detail="Role group with this name already exists")
     
     group = create_role_group(db, name=group_data.name, description=group_data.description)
+    
+    # Log the action
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.ROLE_GROUP_CREATE,
+        target=f"group_id:{group.id}",
+        details=f"Создана группа ролей: {group.name}",
+        request=request
+    )
+    
     return {
         "id": group.id,
         "name": group.name,
@@ -1087,11 +1140,13 @@ class RoleGroupUpdate(BaseModel):
 async def api_update_role_group(
     group_id: int,
     group_data: RoleGroupUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Update role group."""
     from database.crud import update_role_group, get_role_group_by_id
+    from admin_panel.logger_helper import log_admin_action, AdminAction
     
     group = get_role_group_by_id(db, group_id)
     if not group:
@@ -1099,6 +1154,15 @@ async def api_update_role_group(
     
     update_data = group_data.dict(exclude_unset=True)
     updated_group = update_role_group(db, group_id, **update_data)
+    
+    # Log the action
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.ROLE_GROUP_EDIT,
+        target=f"group_id:{group_id}",
+        details=f"Обновлена группа ролей: {updated_group.name}",
+        request=request
+    )
     
     return {
         "id": updated_group.id,
@@ -1109,15 +1173,19 @@ async def api_update_role_group(
 @router.delete("/api/role-groups/{group_id}")
 async def api_delete_role_group(
     group_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """Delete role group."""
     from database.crud import delete_role_group, get_role_group_by_id
+    from admin_panel.logger_helper import log_admin_action, AdminAction
     
     group = get_role_group_by_id(db, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Role group not found")
+    
+    group_name = group.name
     
     # Check if group has roles
     if group.roles and len(group.roles) > 0:
@@ -1127,6 +1195,16 @@ async def api_delete_role_group(
         )
     
     delete_role_group(db, group_id)
+    
+    # Log the action
+    log_admin_action(
+        admin=current_admin,
+        action=AdminAction.ROLE_GROUP_DELETE,
+        target=f"group_id:{group_id}",
+        details=f"Удалена группа ролей: {group_name}",
+        request=request
+    )
+    
     return {"status": "success", "message": "Role group deleted"}
 
 # ==================== ROLE GROUP CHATS API ====================
@@ -1160,6 +1238,7 @@ class GroupChatsUpdate(BaseModel):
 async def api_update_group_chats(
     group_id: int,
     data: GroupChatsUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
@@ -1167,6 +1246,7 @@ async def api_update_group_chats(
     from database.crud import get_role_group_by_id, get_chat_by_id
     from database.models import group_chats
     from sqlalchemy import delete, insert
+    from admin_panel.logger_helper import log_admin_action, AdminAction
     
     group = get_role_group_by_id(db, group_id)
     if not group:
@@ -1196,6 +1276,15 @@ async def api_update_group_chats(
         db.commit()
         
         logger.info(f"Admin {current_admin.username} assigned {len(valid_chat_ids)} chats to group {group_id}")
+        
+        # Log the action
+        log_admin_action(
+            admin=current_admin,
+            action=AdminAction.ROLE_GROUP_ASSIGN_CHATS,
+            target=f"group_id:{group_id}",
+            details=f"Привязано {len(valid_chat_ids)} чатов к группе: {group.name}",
+            request=request
+        )
         
         return {
             "status": "success",
