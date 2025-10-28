@@ -494,7 +494,7 @@
                                     <td><small>${new Date(user.created_at).toLocaleDateString('ru-RU')}<br>${new Date(user.created_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}</small></td>
                                     <td>
                                         <div class="btn-group" role="group">
-                                            <button class="btn btn-sm btn-outline-primary" onclick='openEditModal(${user.id}, "${user.first_name || ''}", "${user.last_name || ''}", "${user.position || ''}", "${user.role?.id || ''}", "${user.status}")' title="Редактировать">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="openEditModal(${user.id})" title="Редактировать">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             ${user.status === 'approved' ? 
@@ -626,13 +626,20 @@
         applyFilters();
     }
     
-    function openEditModal(userId, firstName, lastName, position, roleId, status) {
-        document.getElementById('editUserId').value = userId;
-        document.getElementById('editFirstName').value = firstName || '';
-        document.getElementById('editLastName').value = lastName || '';
-        document.getElementById('editPosition').value = position || '';
-        document.getElementById('editRoleSelect').value = roleId;
-        document.getElementById('editStatusSelect').value = status;
+    function openEditModal(userId) {
+        // Find user in allUsers array
+        const user = allUsers.find(u => u.id === userId);
+        if (!user) {
+            alert('Пользователь не найден');
+            return;
+        }
+        
+        document.getElementById('editUserId').value = user.id;
+        document.getElementById('editFirstName').value = user.first_name || '';
+        document.getElementById('editLastName').value = user.last_name || '';
+        document.getElementById('editPosition').value = user.position || '';
+        document.getElementById('editRoleSelect').value = user.role?.id || '';
+        document.getElementById('editStatusSelect').value = user.status;
         editModal.show();
     }
     
