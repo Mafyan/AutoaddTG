@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#6366f1">
+    <title>{% block title %}Админ-панель{% endblock %} - User Control Bot</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <!-- Custom Design System -->
+    <link rel="stylesheet" href="/static/css/design-system.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Mobile Menu Toggle -->
+    <button 
+        class="mobile-menu-toggle" 
+        id="mobileMenuToggle" 
+        onclick="toggleMobileMenu()"
+        aria-label="Открыть меню навигации"
+        aria-expanded="false"
+        aria-controls="sidebar">
+        <i class="bi bi-list"></i>
+    </button>
+    
+    <!-- Sidebar Overlay -->
+    <div 
+        class="sidebar-overlay" 
+        id="sidebarOverlay" 
+        onclick="toggleMobileMenu()"
+        aria-hidden="true"></div>
+    
+    <!-- Theme Toggle Button -->
+    <button 
+        class="theme-toggle" 
+        id="themeToggle" 
+        onclick="toggleTheme()"
+        aria-label="Переключить тему"
+        title="Переключить тему">
+        <i class="bi bi-sun-fill" id="themeIcon"></i>
+    </button>
+    
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer" role="region" aria-label="Уведомления"></div>
+    
+    {% block content %}{% endblock %}
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Core JavaScript -->
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/core.js"></script>
+    
+    <script>
+        // ==================== AUTHENTICATION ====================
+        function setToken(token) {
+            localStorage.setItem('access_token', token);
+        }
+        
+        function getToken() {
+            return localStorage.getItem('access_token');
+        }
+        
+        function removeToken() {
+            localStorage.removeItem('access_token');
+        }
+        
+        function logout() {
+            removeToken();
+            window.location.href = '/';
+        }
+        
+        // ==================== API REQUEST HELPER ====================
+        async function apiRequest(url, options = {}) {
+            const token = getToken();
+            if (!token && url !== '/api/login') {
+                logout();
+                return;
+            }
+            
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            if (token && url !== '/api/login') {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers
+                });
+                
+                if (response.status === 401) {
+                    logout();
+                    return;
+                }
+                
+                return response;
+            } catch (error) {
+                console.error('API request error:', error);
+                throw error;
+            }
+        }
+        
+        // ==================== BUTTON LOADING STATE ====================
+        function setButtonLoading(button, isLoading) {
+            if (isLoading) {
+                button.dataset.originalContent = button.innerHTML;
+                button.classList.add('btn-loading');
+                button.disabled = true;
+            } else {
+                button.classList.remove('btn-loading');
+                button.innerHTML = button.dataset.originalContent || button.innerHTML;
+                button.disabled = false;
+                delete button.dataset.originalContent;
+            }
+        }
+        
+        // ==================== TOAST NOTIFICATIONS ====================
+        let toastId = 0;
+        
+        function showToast(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toastContainer');
+            const id = `toast-${++toastId}`;
+            
+            const iconMap = {
+                'success': 'bi-check-circle-fill',
+                'error': 'bi-x-circle-fill',
+                'warning': 'bi-exclamation-triangle-fill',
+                'info': 'bi-info-circle-fill'
+            };
+            
+            const titleMap = {
+                'success': 'Успешно',
+                'error': 'Ошибка',
+                'warning': 'Внимание',
+                'info': 'Информация'
+            };
+            
+            const toastHtml = `
+                <div class="toast toast-${type}" id="${id}" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="toast-icon">
+                        <i class="bi ${iconMap[type]}"></i>
+                    </div>
+                    <div class="toast-content">
+                        <div class="toast-title">${titleMap[type]}</div>
+                        <div class="toast-message">${message}</div>
+                    </div>
+                    <button 
+                        class="toast-close" 
+                        onclick="closeToast('${id}')"
+                        aria-label="Закрыть уведомление">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            `;
+            
+            container.insertAdjacentHTML('beforeend', toastHtml);
+            
+            // Auto remove after duration
+            if (duration > 0) {
+                setTimeout(() => closeToast(id), duration);
+            }
+        }
+        
+        function closeToast(id) {
+            const toast = document.getElementById(id);
+            if (toast) {
+                toast.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }
+        }
+        
+        // Animation for slideOutRight
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideOutRight {
+                to {
+                    opacity: 0;
+                    transform: translateX(100%);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // ==================== MOBILE MENU ====================
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const toggle = document.getElementById('mobileMenuToggle');
+            
+            if (sidebar && overlay && toggle) {
+                const isOpen = sidebar.classList.toggle('active');
+                overlay.classList.toggle('active');
+                
+                // Update ARIA
+                toggle.setAttribute('aria-expanded', isOpen);
+                
+                // Change icon
+                const icon = toggle.querySelector('i');
+                icon.className = isOpen ? 'bi bi-x-lg' : 'bi bi-list';
+            }
+        }
+        
+        // Close menu on nav link click (mobile)
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) {
+                const navLinks = sidebar.querySelectorAll('.sidebar-nav-link');
+                navLinks.forEach(link => {
+                    link.addEventListener('click', function() {
+                        if (window.innerWidth <= 768) {
+                            toggleMobileMenu();
+                        }
+                    });
+                });
+            }
+        });
+        
+        // Close menu on resize to desktop
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) {
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                const toggle = document.getElementById('mobileMenuToggle');
+                
+                if (sidebar && overlay && toggle) {
+                    sidebar.classList.remove('active');
+                    overlay.classList.remove('active');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    const icon = toggle.querySelector('i');
+                    icon.className = 'bi bi-list';
+                }
+            }
+        });
+        
+        // ==================== THEME TOGGLE ====================
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme') || 'light';
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            // Update icon
+            const icon = document.getElementById('themeIcon');
+            if (icon) {
+                icon.className = newTheme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+            }
+        }
+        
+        // Initialize theme on page load
+        (function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+            
+            document.documentElement.setAttribute('data-theme', theme);
+            
+            const icon = document.getElementById('themeIcon');
+            if (icon) {
+                icon.className = theme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+            }
+        })();
+        
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (!localStorage.getItem('theme')) {
+                const theme = e.matches ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', theme);
+                const icon = document.getElementById('themeIcon');
+                if (icon) {
+                    icon.className = theme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+                }
+            }
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+
