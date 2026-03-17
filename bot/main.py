@@ -4,7 +4,6 @@ import time
 from telegram import Update
 from telegram.error import TimedOut, NetworkError
 from telegram.ext import (
-    Application,
     CommandHandler,
     MessageHandler,
     filters,
@@ -36,16 +35,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main():
-    """Start the bot."""
-    # Validate token
-    if not settings.BOT_TOKEN:
-        logger.error("BOT_TOKEN is not set in environment variables!")
-        return
-    
-    # Create application (with optional proxy support)
+def build_application():
+    """Create and configure the Telegram application."""
     application = get_application(settings.BOT_TOKEN)
-    
+
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
@@ -73,21 +66,33 @@ def main():
     
     # Add error handler
     application.add_error_handler(error_handler)
-    
+
+    return application
+
+
+def main():
+    """Start the bot."""
+    # Validate token
+    if not settings.BOT_TOKEN:
+        logger.error("BOT_TOKEN is not set in environment variables!")
+        return
+
     # Start the bot. Network timeouts can happen with proxies/ISP issues.
     # Keep the process alive and retry polling instead of exiting and letting Supervisor thrash.
     backoff_s = 2
     while True:
+        application = build_application()
         try:
             logger.info("Starting bot...")
-            application.run_polling(allowed_updates=Update.ALL_TYPES)
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                close_loop=False,
+            )
             backoff_s = 2
         except (TimedOut, NetworkError) as e:
             logger.warning("Telegram network error during polling: %s. Retrying in %ss", e, backoff_s)
             time.sleep(backoff_s)
             backoff_s = min(backoff_s * 2, 60)
-            # Recreate application to ensure a clean HTTP client state after errors.
-            application = get_application(settings.BOT_TOKEN)
         except Exception:
             logger.exception("Fatal error in bot polling loop")
             raise
