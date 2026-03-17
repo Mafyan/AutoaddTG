@@ -1,6 +1,8 @@
 """Main Telegram bot module."""
 import logging
+import time
 from telegram import Update
+from telegram.error import TimedOut, NetworkError
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -72,9 +74,23 @@ def main():
     # Add error handler
     application.add_error_handler(error_handler)
     
-    # Start the bot
-    logger.info("Starting bot...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Start the bot. Network timeouts can happen with proxies/ISP issues.
+    # Keep the process alive and retry polling instead of exiting and letting Supervisor thrash.
+    backoff_s = 2
+    while True:
+        try:
+            logger.info("Starting bot...")
+            application.run_polling(allowed_updates=Update.ALL_TYPES)
+            backoff_s = 2
+        except (TimedOut, NetworkError) as e:
+            logger.warning("Telegram network error during polling: %s. Retrying in %ss", e, backoff_s)
+            time.sleep(backoff_s)
+            backoff_s = min(backoff_s * 2, 60)
+            # Recreate application to ensure a clean HTTP client state after errors.
+            application = get_application(settings.BOT_TOKEN)
+        except Exception:
+            logger.exception("Fatal error in bot polling loop")
+            raise
 
 if __name__ == "__main__":
     main()
