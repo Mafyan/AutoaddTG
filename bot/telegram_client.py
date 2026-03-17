@@ -14,13 +14,18 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-def _build_request(proxy_url: Optional[str] = None) -> HTTPXRequest:
+def _normalize_proxy_url(proxy_url: Optional[str] = None) -> str:
     proxy_url = (proxy_url or settings.TELEGRAM_PROXY_URL or "").strip()
     # curl supports socks5h:// (remote DNS), but httpx/telegram expects socks5://.
     # If user configured socks5h://, normalize it to socks5:// to avoid startup failure.
     if proxy_url.lower().startswith("socks5h://"):
         proxy_url = "socks5://" + proxy_url[len("socks5h://") :]
         logger.warning("Proxy scheme socks5h:// is not supported here; using %s", proxy_url)
+    return proxy_url
+
+
+def _build_request(proxy_url: Optional[str] = None) -> HTTPXRequest:
+    proxy_url = _normalize_proxy_url(proxy_url)
     timeouts = {
         "connect_timeout": settings.TELEGRAM_CONNECT_TIMEOUT,
         "read_timeout": settings.TELEGRAM_READ_TIMEOUT,
@@ -36,6 +41,21 @@ def _build_request(proxy_url: Optional[str] = None) -> HTTPXRequest:
     return HTTPXRequest(**timeouts)
 
 
+def _build_get_updates_request(proxy_url: Optional[str] = None) -> HTTPXRequest:
+    proxy_url = (proxy_url or settings.TELEGRAM_PROXY_URL or "").strip()
+    proxy_url = _normalize_proxy_url(proxy_url)
+    timeouts = {
+        "connect_timeout": settings.TELEGRAM_CONNECT_TIMEOUT,
+        # getUpdates is a long-poll request; give it a slightly longer read timeout.
+        "read_timeout": max(settings.TELEGRAM_READ_TIMEOUT, settings.TELEGRAM_GET_UPDATES_TIMEOUT + 10),
+        "write_timeout": settings.TELEGRAM_WRITE_TIMEOUT,
+        "pool_timeout": settings.TELEGRAM_POOL_TIMEOUT,
+    }
+    if proxy_url:
+        return HTTPXRequest(proxy_url=proxy_url, **timeouts)
+    return HTTPXRequest(**timeouts)
+
+
 def get_bot(token: str, proxy_url: Optional[str] = None) -> Bot:
     """Create a Bot configured to use the proxy (if set)."""
     return Bot(token=token, request=_build_request(proxy_url))
@@ -43,5 +63,11 @@ def get_bot(token: str, proxy_url: Optional[str] = None) -> Bot:
 
 def get_application(token: str, proxy_url: Optional[str] = None) -> Application:
     """Create an Application configured to use the proxy (if set)."""
-    return Application.builder().token(token).request(_build_request(proxy_url)).build()
+    return (
+        Application.builder()
+        .token(token)
+        .request(_build_request(proxy_url))
+        .get_updates_request(_build_get_updates_request(proxy_url))
+        .build()
+    )
 

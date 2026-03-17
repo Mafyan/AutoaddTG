@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     TELEGRAM_READ_TIMEOUT: float = float(os.getenv("TELEGRAM_READ_TIMEOUT", "60"))
     TELEGRAM_WRITE_TIMEOUT: float = float(os.getenv("TELEGRAM_WRITE_TIMEOUT", "30"))
     TELEGRAM_POOL_TIMEOUT: float = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
+    TELEGRAM_GET_UPDATES_TIMEOUT: int = int(os.getenv("TELEGRAM_GET_UPDATES_TIMEOUT", "20"))
     TELEGRAM_VERBOSE_LOGGING: bool = os.getenv("TELEGRAM_VERBOSE_LOGGING", "false").lower() in {
         "1", "true", "yes", "on"
     }

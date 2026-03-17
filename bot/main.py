@@ -128,6 +128,7 @@ def main():
                 allowed_updates=["message", "my_chat_member"],
                 close_loop=False,
                 drop_pending_updates=drop_pending_updates,
+                timeout=settings.TELEGRAM_GET_UPDATES_TIMEOUT,
             )
             backoff_s = 2
         except (TimedOut, NetworkError) as e:
