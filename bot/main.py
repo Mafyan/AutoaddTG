@@ -5,10 +5,11 @@ from telegram import Update
 from telegram.error import TimedOut, NetworkError
 from telegram.ext import (
     CommandHandler,
+    ChatMemberHandler,
     MessageHandler,
+    TypeHandler,
     filters,
     ContextTypes,
-    CallbackQueryHandler
 )
 from config import settings
 from bot.telegram_client import get_application
@@ -89,23 +90,20 @@ def build_application():
     # Add message handlers
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     # Universal text handler - handles all states (AWAITING_PHONE, AWAITING_NAME, AWAITING_POSITION)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-    
-    # Add group message handler for auto-detecting chats
-    application.add_handler(MessageHandler(filters.ChatType.GROUPS, handle_message_in_group))
-    
-    # Add my_chat_member handler for bot add/remove events
-    # Use a custom filter for my_chat_member updates
-    def my_chat_member_filter(update):
-        return update.my_chat_member is not None
-    
-    application.add_handler(MessageHandler(my_chat_member_filter, handle_my_chat_member))
+    application.add_handler(
+        MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, handle_text_message)
+    )
+
+    # Track when the bot is added to/removed from chats via the proper update type.
+    application.add_handler(
+        ChatMemberHandler(handle_my_chat_member, chat_member_types=ChatMemberHandler.MY_CHAT_MEMBER)
+    )
     
     # Add error handler
     application.add_error_handler(error_handler)
 
     if settings.TELEGRAM_VERBOSE_LOGGING:
-        application.add_handler(MessageHandler(filters.ALL, log_update_activity), group=-1)
+        application.add_handler(TypeHandler(Update, log_update_activity), group=-1)
         logger.info("Verbose Telegram update logging is enabled")
 
     return application
@@ -121,13 +119,15 @@ def main():
     # Start the bot. Network timeouts can happen with proxies/ISP issues.
     # Keep the process alive and retry polling instead of exiting and letting Supervisor thrash.
     backoff_s = 2
+    drop_pending_updates = True
     while True:
         application = build_application()
         try:
             logger.info("Starting bot...")
             application.run_polling(
-                allowed_updates=Update.ALL_TYPES,
+                allowed_updates=["message", "my_chat_member"],
                 close_loop=False,
+                drop_pending_updates=drop_pending_updates,
             )
             backoff_s = 2
         except (TimedOut, NetworkError) as e:
@@ -145,6 +145,9 @@ def main():
         except Exception:
             logger.exception("Fatal error in bot polling loop")
             raise
+        finally:
+            # Only drop stale updates on the first process start.
+            drop_pending_updates = False
 
 if __name__ == "__main__":
     main()
