@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 def _build_request(proxy_url: Optional[str] = None) -> HTTPXRequest:
     proxy_url = (proxy_url or settings.TELEGRAM_PROXY_URL or "").strip()
+    # curl supports socks5h:// (remote DNS), but httpx/telegram expects socks5://.
+    # If user configured socks5h://, normalize it to socks5:// to avoid startup failure.
+    if proxy_url.lower().startswith("socks5h://"):
+        proxy_url = "socks5://" + proxy_url[len("socks5h://") :]
+        logger.warning("Proxy scheme socks5h:// is not supported here; using %s", proxy_url)
     timeouts = {
         "connect_timeout": settings.TELEGRAM_CONNECT_TIMEOUT,
         "read_timeout": settings.TELEGRAM_READ_TIMEOUT,
