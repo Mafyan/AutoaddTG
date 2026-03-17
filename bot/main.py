@@ -35,6 +35,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+async def log_update_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Verbose runtime logging for incoming Telegram updates."""
+    if update.message:
+        message = update.message
+        text = (message.text or message.caption or "").replace("\n", " ").strip()
+        if len(text) > 120:
+            text = text[:117] + "..."
+        logger.info(
+            "Update message: update_id=%s chat_id=%s chat_type=%s user_id=%s text=%r",
+            update.update_id,
+            getattr(message.chat, "id", None),
+            getattr(message.chat, "type", None),
+            getattr(message.from_user, "id", None),
+            text,
+        )
+    elif update.my_chat_member:
+        member = update.my_chat_member
+        logger.info(
+            "Update my_chat_member: update_id=%s chat_id=%s old_status=%s new_status=%s",
+            update.update_id,
+            getattr(member.chat, "id", None),
+            getattr(member.old_chat_member, "status", None),
+            getattr(member.new_chat_member, "status", None),
+        )
+    elif update.callback_query:
+        query = update.callback_query
+        logger.info(
+            "Update callback_query: update_id=%s chat_id=%s user_id=%s data=%r",
+            update.update_id,
+            getattr(getattr(query.message, "chat", None), "id", None),
+            getattr(query.from_user, "id", None),
+            query.data,
+        )
+    else:
+        logger.info("Update received: update_id=%s type=other", update.update_id)
+
 def build_application():
     """Create and configure the Telegram application."""
     application = get_application(settings.BOT_TOKEN)
@@ -66,6 +103,10 @@ def build_application():
     
     # Add error handler
     application.add_error_handler(error_handler)
+
+    if settings.TELEGRAM_VERBOSE_LOGGING:
+        application.add_handler(MessageHandler(filters.ALL, log_update_activity), group=-1)
+        logger.info("Verbose Telegram update logging is enabled")
 
     return application
 

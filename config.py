@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     TELEGRAM_READ_TIMEOUT: float = float(os.getenv("TELEGRAM_READ_TIMEOUT", "60"))
     TELEGRAM_WRITE_TIMEOUT: float = float(os.getenv("TELEGRAM_WRITE_TIMEOUT", "30"))
     TELEGRAM_POOL_TIMEOUT: float = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
+    TELEGRAM_VERBOSE_LOGGING: bool = os.getenv("TELEGRAM_VERBOSE_LOGGING", "false").lower() in {
+        "1", "true", "yes", "on"
+    }
     
     # Telegram Client (for pyrogram - optional, for full member sync)
     API_ID: int = int(os.getenv("API_ID", "0"))
