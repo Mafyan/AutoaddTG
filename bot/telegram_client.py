@@ -16,13 +16,19 @@ logger = logging.getLogger(__name__)
 
 def _build_request(proxy_url: Optional[str] = None) -> HTTPXRequest:
     proxy_url = (proxy_url or settings.TELEGRAM_PROXY_URL or "").strip()
+    timeouts = {
+        "connect_timeout": settings.TELEGRAM_CONNECT_TIMEOUT,
+        "read_timeout": settings.TELEGRAM_READ_TIMEOUT,
+        "write_timeout": settings.TELEGRAM_WRITE_TIMEOUT,
+        "pool_timeout": settings.TELEGRAM_POOL_TIMEOUT,
+    }
     if proxy_url:
         if proxy_url.startswith("socks") and proxy_url.endswith(":1080"):
             logger.info("Using SOCKS proxy for Telegram: %s", proxy_url)
         else:
             logger.info("Using proxy for Telegram: %s", proxy_url)
-        return HTTPXRequest(proxy_url=proxy_url)
-    return HTTPXRequest()
+        return HTTPXRequest(proxy_url=proxy_url, **timeouts)
+    return HTTPXRequest(**timeouts)
 
 
 def get_bot(token: str, proxy_url: Optional[str] = None) -> Bot:

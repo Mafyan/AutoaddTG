@@ -22,6 +22,10 @@ class Settings(BaseSettings):
         or os.getenv("HTTPS_PROXY", "")
         or os.getenv("HTTP_PROXY", "")
     )
+    TELEGRAM_CONNECT_TIMEOUT: float = float(os.getenv("TELEGRAM_CONNECT_TIMEOUT", "30"))
+    TELEGRAM_READ_TIMEOUT: float = float(os.getenv("TELEGRAM_READ_TIMEOUT", "60"))
+    TELEGRAM_WRITE_TIMEOUT: float = float(os.getenv("TELEGRAM_WRITE_TIMEOUT", "30"))
+    TELEGRAM_POOL_TIMEOUT: float = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
     
     # Telegram Client (for pyrogram - optional, for full member sync)
     API_ID: int = int(os.getenv("API_ID", "0"))
