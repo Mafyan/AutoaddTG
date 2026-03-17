@@ -93,6 +93,14 @@ def main():
             logger.warning("Telegram network error during polling: %s. Retrying in %ss", e, backoff_s)
             time.sleep(backoff_s)
             backoff_s = min(backoff_s * 2, 60)
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                logger.warning("Polling hit closed event loop. Retrying in %ss", backoff_s)
+                time.sleep(backoff_s)
+                backoff_s = min(backoff_s * 2, 60)
+                continue
+            logger.exception("Fatal runtime error in bot polling loop")
+            raise
         except Exception:
             logger.exception("Fatal error in bot polling loop")
             raise
