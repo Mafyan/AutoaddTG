@@ -300,7 +300,8 @@ async def api_approve_request(
                 f"Если ссылка истекла, обратитесь к администратору."
             )
             
-            bot = Bot(token=settings.BOT_TOKEN)
+            from bot.telegram_client import get_bot
+            bot = get_bot(token=settings.BOT_TOKEN)
             await bot.send_message(chat_id=user.telegram_id, text=message, disable_web_page_preview=True)
             print(f"✅ Temporary links sent to user {user.telegram_id}")
             
@@ -327,7 +328,8 @@ async def api_reject_request(
     # Send notification to user via Telegram
     if user.telegram_id and settings.BOT_TOKEN:
         try:
-            bot = Bot(token=settings.BOT_TOKEN)
+            from bot.telegram_client import get_bot
+            bot = get_bot(token=settings.BOT_TOKEN)
             message = (
                 "❌ Ваша заявка была отклонена.\n\n"
                 "Обратитесь к администратору для получения дополнительной информации."
@@ -477,7 +479,8 @@ async def api_update_user(
                 )
                 
                 try:
-                    bot = Bot(token=settings.BOT_TOKEN)
+                    from bot.telegram_client import get_bot
+                    bot = get_bot(token=settings.BOT_TOKEN)
                     await bot.send_message(chat_id=user.telegram_id, text=message, disable_web_page_preview=True)
                     print(f"✅ Temporary links sent to user {user.telegram_id}\n")
                 except TelegramError as e:
@@ -590,7 +593,8 @@ async def api_fire_user(
                 print("⚠️  WARNING: No active chats found for user")
             
             # Send notification to user
-            bot = Bot(token=settings.BOT_TOKEN)
+            from bot.telegram_client import get_bot
+            bot = get_bot(token=settings.BOT_TOKEN)
             message = (
                 "🚫 Ваш доступ к системе был отозван.\n\n"
                 "Вы были удалены из всех корпоративных чатов.\n"
@@ -647,7 +651,8 @@ async def api_reset_link_cooldown(
     # Send notification to user if they have telegram_id
     if user.telegram_id and settings.BOT_TOKEN:
         try:
-            bot = Bot(token=settings.BOT_TOKEN)
+            from bot.telegram_client import get_bot
+            bot = get_bot(token=settings.BOT_TOKEN)
             message = (
                 "✅ Администратор сбросил ограничение на запрос ссылок.\n\n"
                 "Теперь вы можете запросить новые ссылки на чаты командой /mychats"
@@ -962,7 +967,8 @@ async def api_rehire_user(
     # Send notification to user via Telegram
     if user.telegram_id and settings.BOT_TOKEN:
         try:
-            bot = Bot(token=settings.BOT_TOKEN)
+            from bot.telegram_client import get_bot
+            bot = get_bot(token=settings.BOT_TOKEN)
             message = (
                 "✅ Ваш доступ к системе восстановлен!\n\n"
                 "Используйте команду /mychats чтобы получить ссылки на ваши чаты."
@@ -1054,7 +1060,8 @@ async def api_delete_user(
                 print(f"✅ Successfully removed from {success_count}/{len(active_chat_ids)} chats")
                 
                 # Send notification
-                bot = Bot(token=settings.BOT_TOKEN)
+                from bot.telegram_client import get_bot
+                bot = get_bot(token=settings.BOT_TOKEN)
                 message = (
                     "🚫 Ваш аккаунт был удален из системы.\n\n"
                     "Вы были удалены из всех корпоративных чатов."

@@ -10,6 +10,7 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 from config import settings
+from bot.telegram_client import get_application
 from bot.handlers import (
     start_command,
     help_command,
@@ -40,8 +41,8 @@ def main():
         logger.error("BOT_TOKEN is not set in environment variables!")
         return
     
-    # Create application
-    application = Application.builder().token(settings.BOT_TOKEN).build()
+    # Create application (with optional proxy support)
+    application = get_application(settings.BOT_TOKEN)
     
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))

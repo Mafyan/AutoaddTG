@@ -12,6 +12,16 @@ class Settings(BaseSettings):
     
     # Telegram Bot
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    # Proxy for Telegram Bot API (python-telegram-bot uses HTTPX under the hood).
+    # Examples:
+    # - socks5://127.0.0.1:1080
+    # - http://127.0.0.1:8888
+    TELEGRAM_PROXY_URL: str = (
+        os.getenv("TELEGRAM_PROXY_URL", "")
+        or os.getenv("ALL_PROXY", "")
+        or os.getenv("HTTPS_PROXY", "")
+        or os.getenv("HTTP_PROXY", "")
+    )
     
     # Telegram Client (for pyrogram - optional, for full member sync)
     API_ID: int = int(os.getenv("API_ID", "0"))

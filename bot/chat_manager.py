@@ -2,10 +2,11 @@
 import logging
 import asyncio
 from typing import List, Optional
-from telegram import Bot, Update
+from telegram import Update
 from telegram.error import TelegramError, BadRequest
 from sqlalchemy.orm import Session
 from database.database import SessionLocal
+from bot.telegram_client import get_bot
 from database.crud import (
     get_chats_by_role, add_chat_member, remove_chat_member,
     get_user_chats, fire_user, get_user_by_telegram_id, get_chats
@@ -18,7 +19,7 @@ class ChatManager:
     """Manages bot's interaction with Telegram chats."""
     
     def __init__(self, bot_token: str):
-        self.bot = Bot(token=bot_token)
+        self.bot = get_bot(token=bot_token)
         self._sync_task = None
         self._running = False
     

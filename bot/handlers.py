@@ -608,8 +608,8 @@ async def _add_chat_to_database(db: SessionLocal, chat):
             
             # Try to get invite link
             try:
-                from telegram import Bot
-                bot = Bot(token=settings.BOT_TOKEN)
+                from bot.telegram_client import get_bot
+                bot = get_bot(token=settings.BOT_TOKEN)
                 invite_link = await bot.export_chat_invite_link(chat.id)
                 update_chat(db, chat_obj.id, chat_link=invite_link)
                 print(f"DEBUG: Got invite link for {chat.title}")
